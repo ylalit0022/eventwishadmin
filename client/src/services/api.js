@@ -2,6 +2,10 @@ import axios from 'axios';
 import API_CONFIG from '../config/api.config';
 import { message } from 'antd';
 
+// Base URL configuration
+const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000';
+axios.defaults.baseURL = API_BASE_URL;
+
 const API_URL = API_CONFIG.BASE_URL;
 
 // Create axios instance with base URL
@@ -39,19 +43,19 @@ api.interceptors.response.use(
 // Templates API
 export const templatesApi = {
     // Get all templates with pagination and filters
-    getAll: (params) => api.get(API_CONFIG.ENDPOINTS.TEMPLATES.BASE, { params }),
+    getAll: (params) => api.get('/templates', { params }),
 
     // Get template by ID
-    getById: (id) => api.get(`${API_CONFIG.ENDPOINTS.TEMPLATES.BASE}/${id}`),
+    getById: (id) => api.get(`/templates/${id}`),
 
     // Create new template
-    create: (data) => api.post(API_CONFIG.ENDPOINTS.TEMPLATES.BASE, data),
+    create: (data) => api.post('/templates', data),
 
     // Update template
-    update: (id, data) => api.put(`${API_CONFIG.ENDPOINTS.TEMPLATES.BASE}/${id}`, data),
+    update: (id, data) => api.put(`/templates/${id}`, data),
 
     // Delete template
-    delete: (id) => api.delete(`${API_CONFIG.ENDPOINTS.TEMPLATES.BASE}/${id}`),
+    delete: (id) => api.delete(`/templates/${id}`),
 
     // Get template categories
     getCategories: () => api.get(API_CONFIG.ENDPOINTS.TEMPLATES.CATEGORIES),
@@ -72,7 +76,10 @@ export const dashboardApi = {
     getStats: () => api.get(API_CONFIG.ENDPOINTS.DASHBOARD.STATS),
 
     // Get dashboard summary
-    getSummary: () => api.get(API_CONFIG.ENDPOINTS.DASHBOARD.SUMMARY)
+    getSummary: () => api.get('/dashboard/summary'),
+
+    // Get dashboard stats
+    getDashboardStats: () => api.get('/dashboard/stats')
 };
 
 // Files API
@@ -95,10 +102,10 @@ export const filesApi = {
     },
 
     // Get file list
-    getAll: () => api.get(API_CONFIG.ENDPOINTS.FILES.LIST),
+    getAll: (params) => api.get('/files', { params }),
 
     // Delete file
-    delete: (id) => api.delete(`${API_CONFIG.ENDPOINTS.FILES.BASE}/${id}`),
+    delete: (id) => api.delete(`/files/${id}`),
 
     // Download file
     download: (id) => api.get(`${API_CONFIG.ENDPOINTS.FILES.DOWNLOAD}/${id}`, { responseType: 'blob' }),
@@ -109,33 +116,18 @@ export const filesApi = {
 
 // AdMob API
 export const adMobApi = {
-    async getAll(params = {}) {
-        return await api.get(API_CONFIG.ENDPOINTS.ADMOB.BASE, { params });
-    },
-    
-    async getById(id) {
-        return await api.get(`${API_CONFIG.ENDPOINTS.ADMOB.BASE}/${id}`);
-    },
-    
-    async create(data) {
-        return await api.post(API_CONFIG.ENDPOINTS.ADMOB.BASE, data);
-    },
-    
-    async update(id, data) {
-        return await api.put(`${API_CONFIG.ENDPOINTS.ADMOB.BASE}/${id}`, data);
-    },
-    
-    async delete(id) {
-        return await api.delete(`${API_CONFIG.ENDPOINTS.ADMOB.BASE}/${id}`);
-    },
-    
-    async getTypes() {
-        return await api.get(API_CONFIG.ENDPOINTS.ADMOB.TYPES);
-    },
+    getAll: (params) => api.get('/admob', { params }),
+    create: (data) => api.post('/admob', data),
+    update: (id, data) => api.put(`/admob/${id}`, data),
+    delete: (id) => api.delete(`/admob/${id}`),
+    toggle: (id) => api.patch(`/admob/${id}/toggle`),
+    getTypes: () => api.get('/admob/types')
+};
 
-    async getStatus() {
-        return await api.get(API_CONFIG.ENDPOINTS.ADMOB.STATUS);
-    }
+// Shared Wishes API
+export const sharedWishesApi = {
+    getAll: (params) => api.get('/shared-wishes', { params }),
+    getAnalytics: () => api.get('/shared-wishes/analytics')
 };
 
 // Auth API

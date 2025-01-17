@@ -1,108 +1,186 @@
 const express = require('express');
 const router = express.Router();
-const AdMob = require('../models/AdMob');
+const { AdMob, adTypes } = require('../models/AdMob');
 
-// Get all AdMob units
+// Get all AdMob ads with filters and pagination
 router.get('/', async (req, res) => {
     try {
-        const { page = 1, limit = 10, search = '' } = req.query;
-        const searchRegex = new RegExp(search, 'i');
+        const { 
+            page = 1, 
+            limit = 10, 
+            adType, 
+            platform, 
+            isActive,
+            search
+        } = req.query;
 
-        const query = {
-            $or: [
-                { adUnitName: searchRegex },
-                { adUnitCode: searchRegex }
-            ]
-        };
+        // Build query
+        const query = {};
+        if (adType) query.adType = adType.toUpperCase();
+        if (platform) query.platform = platform.toUpperCase();
+        if (isActive !== undefined) query.isActive = isActive === 'true';
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { adUnitCode: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
 
-        const [adMobs, total] = await Promise.all([
+        // Execute query with pagination
+        const [ads, total] = await Promise.all([
             AdMob.find(query)
+                .sort({ createdAt: -1 })
                 .skip((page - 1) * limit)
-                .limit(parseInt(limit))
-                .sort({ createdAt: -1 }),
+                .limit(parseInt(limit)),
             AdMob.countDocuments(query)
         ]);
 
         res.json({
-            adMobs,
-            total,
-            totalPages: Math.ceil(total / limit),
-            currentPage: page
+            success: true,
+            message: 'AdMob ads retrieved successfully',
+            data: {
+                ads,
+                total,
+                page: parseInt(page),
+                totalPages: Math.ceil(total / limit)
+            }
         });
-    } catch (err) {
-        console.error('Error getting AdMob units:', err);
-        res.status(500).json({ message: 'Error getting AdMob units' });
+    } catch (error) {
+        console.error('Error fetching AdMob ads:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching AdMob ads',
+            error: error.message
+        });
     }
 });
 
-// Get AdMob types
-router.get('/types', async (req, res) => {
-    try {
-        const types = ['banner', 'interstitial', 'rewarded'];
-        res.json(types);
-    } catch (err) {
-        console.error('Error getting AdMob types:', err);
-        res.status(500).json({ message: 'Error getting AdMob types' });
-    }
-});
-
-// Create new AdMob unit
+// Create new AdMob ad
 router.post('/', async (req, res) => {
     try {
-        const adMob = new AdMob(req.body);
+        const adMob = new AdMob({
+            ...req.body,
+            createdBy: req.body.createdBy || 'admin' // Replace with actual user ID from auth
+        });
+
         await adMob.save();
-        res.status(201).json(adMob);
-    } catch (err) {
-        console.error('Error creating AdMob unit:', err);
-        res.status(500).json({ message: 'Error creating AdMob unit' });
+        
+        res.status(201).json({
+            success: true,
+            message: 'AdMob ad created successfully',
+            data: adMob
+        });
+    } catch (error) {
+        console.error('Error creating AdMob ad:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error creating AdMob ad',
+            error: error.message
+        });
     }
 });
 
-// Update AdMob unit
+// Update AdMob ad
 router.put('/:id', async (req, res) => {
     try {
         const adMob = await AdMob.findByIdAndUpdate(
             req.params.id,
             { $set: req.body },
-            { new: true }
+            { new: true, runValidators: true }
         );
+
         if (!adMob) {
-            return res.status(404).json({ message: 'AdMob unit not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'AdMob ad not found'
+            });
         }
-        res.json(adMob);
-    } catch (err) {
-        console.error('Error updating AdMob unit:', err);
-        res.status(500).json({ message: 'Error updating AdMob unit' });
+
+        res.json({
+            success: true,
+            message: 'AdMob ad updated successfully',
+            data: adMob
+        });
+    } catch (error) {
+        console.error('Error updating AdMob ad:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating AdMob ad',
+            error: error.message
+        });
     }
 });
 
-// Toggle AdMob unit status
-router.put('/:id/toggle', async (req, res) => {
-    try {
-        const adMob = await AdMob.findById(req.params.id);
-        if (!adMob) {
-            return res.status(404).json({ message: 'AdMob unit not found' });
-        }
-        adMob.isActive = !adMob.isActive;
-        await adMob.save();
-        res.json(adMob);
-    } catch (err) {
-        console.error('Error toggling AdMob unit status:', err);
-        res.status(500).json({ message: 'Error toggling AdMob unit status' });
-    }
-});
-
-// Delete AdMob unit
+// Delete AdMob ad
 router.delete('/:id', async (req, res) => {
     try {
         const adMob = await AdMob.findByIdAndDelete(req.params.id);
+
         if (!adMob) {
-            return res.status(404).json({ message: 'AdMob unit not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'AdMob ad not found'
+            });
         }
-        res.json({ message: 'AdMob unit deleted successfully' });
-    } catch (err) {
-        console.error('Error deleting AdMob unit:', err);
-        res.status(500).json({ message: 'Error deleting AdMob unit' });
+
+        res.json({
+            success: true,
+            message: 'AdMob ad deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting AdMob ad:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting AdMob ad',
+            error: error.message
+        });
+    }
+});
+
+// Toggle AdMob ad status
+router.patch('/:id/toggle', async (req, res) => {
+    try {
+        const adMob = await AdMob.findById(req.params.id);
+
+        if (!adMob) {
+            return res.status(404).json({
+                success: false,
+                message: 'AdMob ad not found'
+            });
+        }
+
+        adMob.isActive = !adMob.isActive;
+        await adMob.save();
+
+        res.json({
+            success: true,
+            message: `AdMob ad ${adMob.isActive ? 'activated' : 'deactivated'} successfully`,
+            data: adMob
+        });
+    } catch (error) {
+        console.error('Error toggling AdMob ad:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error toggling AdMob ad',
+            error: error.message
+        });
+    }
+});
+
+// Get ad types
+router.get('/types', async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            data: adTypes
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching ad types',
+            error: error.message
+        });
     }
 });
 

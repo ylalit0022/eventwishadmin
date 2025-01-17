@@ -1,50 +1,63 @@
 const mongoose = require('mongoose');
 
-const adMobSchema = new mongoose.Schema({
+const adTypes = [
+    { value: 'banner', label: 'Banner Ad' },
+    { value: 'interstitial', label: 'Interstitial Ad' },
+    { value: 'rewarded', label: 'Rewarded Ad' },
+    { value: 'native', label: 'Native Ad' },
+    { value: 'app_open', label: 'App Open Ad' }
+];
+
+const AdMobSchema = new mongoose.Schema({
     name: {
         type: String,
         required: [true, 'Ad name is required'],
         trim: true
     },
+    adUnitId: {
+        type: String,
+        required: [true, 'Ad Unit ID is required'],
+        unique: true,
+        trim: true
+    },
     adType: {
         type: String,
         required: [true, 'Ad type is required'],
-        trim: true
+        enum: {
+            values: adTypes.map(type => type.value),
+            message: 'Invalid ad type'
+        }
     },
-    adUnitCode: {
-        type: String,
-        required: [true, 'Ad unit code is required'],
-        trim: true,
-        unique: true
-    },
-    isActive: {
+    status: {
         type: Boolean,
         default: true
     },
-    platform: {
-        type: String,
-        enum: ['android', 'ios', 'both'],
-        default: 'both'
+    createdAt: {
+        type: Date,
+        default: Date.now
     },
-    description: {
-        type: String,
-        trim: true
+    updatedAt: {
+        type: Date,
+        default: Date.now
     }
 }, {
-    timestamps: true,
-    toJSON: {
-        transform: function(doc, ret) {
-            ret.id = ret._id;
-            delete ret._id;
-            delete ret.__v;
-            return ret;
-        }
-    }
+    timestamps: true
 });
 
-// Ensure adUnitCode is unique
-adMobSchema.index({ adUnitCode: 1 }, { unique: true });
+// Static method to get ad types
+AdMobSchema.statics.getAdTypes = function() {
+    return adTypes;
+};
 
-const AdMob = mongoose.model('AdMob', adMobSchema);
+// Pre-save middleware to update timestamps
+AdMobSchema.pre('save', function(next) {
+    this.updatedAt = Date.now();
+    next();
+});
 
-module.exports = AdMob;
+const AdMob = mongoose.model('AdMob', AdMobSchema);
+
+module.exports = {
+    AdMob,
+    adTypes
+};

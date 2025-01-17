@@ -63,9 +63,8 @@ const SharedFiles = () => {
         try {
             setLoading(true);
             const response = await filesApi.getAll();
-            console.log('Files response:', response); // Debug log
             
-            if (response?.data?.data?.files) {
+            if (response?.data?.success && response.data.data?.files) {
                 setFiles(response.data.data.files);
             } else {
                 console.error('Unexpected response format:', response);

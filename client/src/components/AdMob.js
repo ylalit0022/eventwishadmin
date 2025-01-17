@@ -1,100 +1,134 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Card,
+    Table,
     Button,
     Space,
-    Typography,
     Modal,
     Form,
     Input,
     Select,
     Switch,
-    Spin,
-    Alert,
-    Row,
-    Col,
-    Table
+    message,
+    Card,
+    Typography
 } from 'antd';
 import {
+    PlusOutlined,
     EditOutlined,
     DeleteOutlined,
-    PlusOutlined
+    CheckCircleOutlined,
+    CloseCircleOutlined
 } from '@ant-design/icons';
 import { adMobApi } from '../services/api';
-import { toast } from '../utils/notification';
 
 const { Title } = Typography;
 const { Option } = Select;
 
-const adTypes = [
-    { value: 'banner', label: 'Banner' },
-    { value: 'interstitial', label: 'Interstitial' },
-    { value: 'rewarded', label: 'Rewarded' },
-    { value: 'native', label: 'Native' }
+// Define ad types locally
+const AD_TYPES = [
+    { value: 'banner', label: 'Banner Ad' },
+    { value: 'interstitial', label: 'Interstitial Ad' },
+    { value: 'rewarded', label: 'Rewarded Ad' },
+    { value: 'native', label: 'Native Ad' },
+    { value: 'app_open', label: 'App Open Ad' }
 ];
 
 const AdMob = () => {
-    const [adUnits, setAdUnits] = useState([]);
+    const [form] = Form.useForm();
+    const [ads, setAds] = useState([]);
     const [loading, setLoading] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
-    const [editingAdUnit, setEditingAdUnit] = useState(null);
-    const [form] = Form.useForm();
+    const [editingAd, setEditingAd] = useState(null);
+    const [pagination, setPagination] = useState({
+        current: 1,
+        pageSize: 10,
+        total: 0
+    });
 
-    useEffect(() => {
-        fetchAdUnits();
-    }, []);
-
-    const fetchAdUnits = async () => {
-        setLoading(true);
+    // Fetch ads
+    const fetchAds = async (page = 1, pageSize = 10) => {
         try {
-            const response = await adMobApi.getAll();
-            setAdUnits(response.adMobs || []);
+            setLoading(true);
+            const response = await adMobApi.getAll({
+                page,
+                limit: pageSize
+            });
+
+            if (response?.data?.success) {
+                const { ads, pagination: paginationData } = response.data.data;
+                setAds(ads);
+                setPagination({
+                    current: paginationData.page,
+                    pageSize,
+                    total: paginationData.total
+                });
+            }
         } catch (error) {
-            toast.error('Failed to fetch ad units');
+            console.error('Error fetching ads:', error);
+            message.error('Failed to fetch ads');
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        fetchAds();
+    }, []);
+
+    // Handle form submit
     const handleSubmit = async (values) => {
         try {
-            if (editingAdUnit) {
-                await adMobApi.update(editingAdUnit._id, values);
-                toast.success('Ad unit updated successfully');
+            setLoading(true);
+            if (editingAd) {
+                await adMobApi.update(editingAd._id, values);
+                message.success('Ad updated successfully');
             } else {
                 await adMobApi.create(values);
-                toast.success('Ad unit created successfully');
+                message.success('Ad created successfully');
             }
             setModalVisible(false);
             form.resetFields();
-            fetchAdUnits();
+            setEditingAd(null);
+            fetchAds(pagination.current, pagination.pageSize);
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to save ad unit');
+            console.error('Error saving ad:', error);
+            message.error('Failed to save ad');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleDelete = async (id) => {
+    // Handle ad status toggle
+    const handleToggle = async (record) => {
         try {
-            await adMobApi.delete(id);
-            toast.success('Ad unit deleted successfully');
-            fetchAdUnits();
+            setLoading(true);
+            await adMobApi.toggle(record._id);
+            message.success(`Ad ${record.status ? 'disabled' : 'enabled'} successfully`);
+            fetchAds(pagination.current, pagination.pageSize);
         } catch (error) {
-            toast.error('Failed to delete ad unit');
+            console.error('Error toggling ad status:', error);
+            message.error('Failed to toggle ad status');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const showEditModal = (adUnit) => {
-        setEditingAdUnit(adUnit);
-        form.setFieldsValue(adUnit);
-        setModalVisible(true);
+    // Handle ad deletion
+    const handleDelete = async (record) => {
+        try {
+            setLoading(true);
+            await adMobApi.delete(record._id);
+            message.success('Ad deleted successfully');
+            fetchAds(pagination.current, pagination.pageSize);
+        } catch (error) {
+            console.error('Error deleting ad:', error);
+            message.error('Failed to delete ad');
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const showCreateModal = () => {
-        setEditingAdUnit(null);
-        form.resetFields();
-        setModalVisible(true);
-    };
-
+    // Table columns
     const columns = [
         {
             title: 'Name',
@@ -102,22 +136,29 @@ const AdMob = () => {
             key: 'name'
         },
         {
-            title: 'Type',
-            dataIndex: 'type',
-            key: 'type',
-            render: (type) => type.charAt(0).toUpperCase() + type.slice(1)
+            title: 'Ad Type',
+            dataIndex: 'adType',
+            key: 'adType',
+            render: (text) => {
+                const adType = AD_TYPES.find(type => type.value === text);
+                return adType ? adType.label : text;
+            }
         },
         {
-            title: 'Unit ID',
-            dataIndex: 'unitId',
-            key: 'unitId'
+            title: 'Ad Unit ID',
+            dataIndex: 'adUnitId',
+            key: 'adUnitId'
         },
         {
-            title: 'Active',
-            dataIndex: 'isActive',
-            key: 'isActive',
-            render: (isActive) => (
-                <Switch checked={isActive} disabled />
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            render: (status) => (
+                <span style={{ color: status ? '#52c41a' : '#ff4d4f' }}>
+                    {status ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                    {' '}
+                    {status ? 'Active' : 'Inactive'}
+                </span>
             )
         },
         {
@@ -128,15 +169,23 @@ const AdMob = () => {
                     <Button
                         type="primary"
                         icon={<EditOutlined />}
-                        onClick={() => showEditModal(record)}
+                        onClick={() => {
+                            setEditingAd(record);
+                            form.setFieldsValue(record);
+                            setModalVisible(true);
+                        }}
                     >
                         Edit
                     </Button>
+                    <Switch
+                        checked={record.status}
+                        onChange={() => handleToggle(record)}
+                    />
                     <Button
                         type="primary"
                         danger
                         icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(record._id)}
+                        onClick={() => handleDelete(record)}
                     >
                         Delete
                     </Button>
@@ -145,47 +194,47 @@ const AdMob = () => {
         }
     ];
 
-    if (loading) {
-        return (
-            <div style={{ textAlign: 'center', padding: '50px' }}>
-                <Spin size="large" />
-            </div>
-        );
-    }
-
     return (
-        <div style={{ padding: '24px' }}>
-            <Row justify="space-between" align="middle" style={{ marginBottom: '16px' }}>
-                <Col>
-                    <Title level={2}>AdMob Units</Title>
-                </Col>
-                <Col>
-                    <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={showCreateModal}
-                    >
-                        Add New Ad Unit
-                    </Button>
-                </Col>
-            </Row>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Card>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
+                        <Title level={4}>AdMob Management</Title>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => {
+                                setEditingAd(null);
+                                form.resetFields();
+                                setModalVisible(true);
+                            }}
+                        >
+                            Add New Ad
+                        </Button>
+                    </Space>
 
-            <Table
-                dataSource={adUnits}
-                columns={columns}
-                rowKey="_id"
-                pagination={{
-                    defaultPageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `Total ${total} items`
-                }}
-            />
+                    <Table
+                        columns={columns}
+                        dataSource={ads}
+                        rowKey="_id"
+                        pagination={pagination}
+                        loading={loading}
+                        onChange={({ current, pageSize }) => fetchAds(current, pageSize)}
+                    />
+                </Space>
+            </Card>
 
             <Modal
-                title={editingAdUnit ? 'Edit Ad Unit' : 'Create New Ad Unit'}
+                title={editingAd ? 'Edit Ad' : 'Add New Ad'}
                 open={modalVisible}
-                onCancel={() => setModalVisible(false)}
-                footer={null}
+                onOk={() => form.submit()}
+                onCancel={() => {
+                    setModalVisible(false);
+                    form.resetFields();
+                    setEditingAd(null);
+                }}
+                destroyOnClose
+                confirmLoading={loading}
             >
                 <Form
                     form={form}
@@ -195,18 +244,18 @@ const AdMob = () => {
                     <Form.Item
                         name="name"
                         label="Name"
-                        rules={[{ required: true, message: 'Please enter name' }]}
+                        rules={[{ required: true, message: 'Please enter ad name' }]}
                     >
-                        <Input />
+                        <Input placeholder="Enter ad name" />
                     </Form.Item>
 
                     <Form.Item
-                        name="type"
-                        label="Type"
-                        rules={[{ required: true, message: 'Please select type' }]}
+                        name="adType"
+                        label="Ad Type"
+                        rules={[{ required: true, message: 'Please select ad type' }]}
                     >
-                        <Select>
-                            {adTypes.map(type => (
+                        <Select placeholder="Select ad type">
+                            {AD_TYPES.map(type => (
                                 <Option key={type.value} value={type.value}>
                                     {type.label}
                                 </Option>
@@ -215,34 +264,24 @@ const AdMob = () => {
                     </Form.Item>
 
                     <Form.Item
-                        name="unitId"
-                        label="Unit ID"
-                        rules={[{ required: true, message: 'Please enter unit ID' }]}
+                        name="adUnitId"
+                        label="Ad Unit ID"
+                        rules={[{ required: true, message: 'Please enter Ad Unit ID' }]}
                     >
-                        <Input />
+                        <Input placeholder="Enter Ad Unit ID" />
                     </Form.Item>
 
                     <Form.Item
-                        name="isActive"
-                        label="Active"
+                        name="status"
+                        label="Status"
                         valuePropName="checked"
+                        initialValue={true}
                     >
                         <Switch />
                     </Form.Item>
-
-                    <Form.Item>
-                        <Space>
-                            <Button type="primary" htmlType="submit">
-                                {editingAdUnit ? 'Update' : 'Create'}
-                            </Button>
-                            <Button onClick={() => setModalVisible(false)}>
-                                Cancel
-                            </Button>
-                        </Space>
-                    </Form.Item>
                 </Form>
             </Modal>
-        </div>
+        </Space>
     );
 };
 

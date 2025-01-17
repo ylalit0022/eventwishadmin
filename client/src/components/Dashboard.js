@@ -1,112 +1,110 @@
-import { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Spin, Alert, Statistic } from 'antd';
-import { PieChartOutlined, FileOutlined } from '@ant-design/icons';
-import { dashboardApi } from '../services/api';
-import { toast } from '../utils/notification';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Card, Statistic, Space, Typography } from 'antd';
+import {
+    FileOutlined,
+    EyeOutlined,
+    MobileOutlined,
+    GiftOutlined,
+    RiseOutlined
+} from '@ant-design/icons';
+import { dashboardApi, sharedWishesApi, adMobApi } from '../services/api';
 
 const { Title } = Typography;
 
-function Dashboard() {
-    const [stats, setStats] = useState({
-        totalTemplates: 0,
-        templatesByCategory: [],
-        recentActivity: []
-    });
+const Dashboard = () => {
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        fetchDashboardData();
-    }, []);
+    const [stats, setStats] = useState({
+        templates: 0,
+        totalViews: 0,
+        activeAds: 0,
+        sharedWishes: 0,
+        recentViews: 0
+    });
 
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            setError(null);
-            
-            const [statsData, activityData] = await Promise.all([
-                dashboardApi.getStats(),
-                dashboardApi.getActivity()
+            const [dashboardStats, wishesAnalytics] = await Promise.all([
+                dashboardApi.getSummary(),
+                sharedWishesApi.getAnalytics()
             ]);
 
-            setStats({
-                ...statsData,
-                recentActivity: activityData
-            });
+            if (dashboardStats?.data?.success && wishesAnalytics?.data?.success) {
+                const dashboard = dashboardStats.data.data;
+                const wishes = wishesAnalytics.data.data;
+
+                setStats({
+                    templates: dashboard.templateCount || 0,
+                    totalViews: wishes.total.views || 0,
+                    activeAds: dashboard.activeAdCount || 0,
+                    sharedWishes: wishes.total.wishes || 0,
+                    recentViews: wishes.views.daily || 0
+                });
+            }
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
-            setError('Failed to load dashboard data');
-            toast.error('Failed to load dashboard data');
         } finally {
             setLoading(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div style={{ textAlign: 'center', padding: '50px' }}>
-                <Spin size="large" />
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <Alert
-                message="Error"
-                description={error}
-                type="error"
-                showIcon
-                style={{ margin: '24px' }}
-            />
-        );
-    }
+    useEffect(() => {
+        fetchDashboardData();
+    }, []);
 
     return (
-        <div style={{ padding: '24px' }}>
-            <Title level={2}>Dashboard</Title>
-            
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Title level={4}>Dashboard Overview</Title>
+
             <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} md={8} lg={6}>
-                    <Card>
+                <Col xs={24} sm={12} lg={6}>
+                    <Card loading={loading}>
                         <Statistic
                             title="Total Templates"
-                            value={stats.totalTemplates}
+                            value={stats.templates}
                             prefix={<FileOutlined />}
                         />
                     </Card>
                 </Col>
-
-                {stats.templatesByCategory.map((category) => (
-                    <Col xs={24} sm={12} md={8} lg={6} key={category._id}>
-                        <Card>
-                            <Statistic
-                                title={`${category._id} Templates`}
-                                value={category.count}
-                                prefix={<PieChartOutlined />}
-                            />
-                        </Card>
-                    </Col>
-                ))}
+                <Col xs={24} sm={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic
+                            title="Total Views"
+                            value={stats.totalViews}
+                            prefix={<EyeOutlined />}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic
+                            title="Active Ads"
+                            value={stats.activeAds}
+                            prefix={<MobileOutlined />}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic
+                            title="Shared Wishes"
+                            value={stats.sharedWishes}
+                            prefix={<GiftOutlined />}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic
+                            title="Recent Views (24h)"
+                            value={stats.recentViews}
+                            prefix={<RiseOutlined />}
+                        />
+                    </Card>
+                </Col>
             </Row>
-
-            {stats.recentActivity.length > 0 && (
-                <div style={{ marginTop: '24px' }}>
-                    <Title level={3}>Recent Activity</Title>
-                    <Row gutter={[16, 16]}>
-                        {stats.recentActivity.map((activity, index) => (
-                            <Col xs={24} key={index}>
-                                <Card size="small">
-                                    <p>{activity.description}</p>
-                                    <small>{new Date(activity.timestamp).toLocaleString()}</small>
-                                </Card>
-                            </Col>
-                        ))}
-                    </Row>
-                </div>
-            )}
-        </div>
+        </Space>
     );
-}
+};
 
 export default Dashboard;

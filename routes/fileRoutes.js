@@ -72,12 +72,21 @@ const uploadMiddleware = (req, res, next) => {
         if (err instanceof multer.MulterError) {
             // A Multer error occurred when uploading
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ message: 'File size cannot exceed 5MB' });
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'File size cannot exceed 5MB'
+                });
             }
-            return res.status(400).json({ message: err.message });
+            return res.status(400).json({ 
+                success: false,
+                message: err.message
+            });
         } else if (err) {
             // An unknown error occurred
-            return res.status(400).json({ message: err.message });
+            return res.status(400).json({ 
+                success: false,
+                message: err.message
+            });
         }
         // Everything went fine
         next();
@@ -88,11 +97,14 @@ const uploadMiddleware = (req, res, next) => {
 router.get('/', async (req, res) => {
     try {
         const files = await File.find().sort({ createdAt: -1 });
-        console.log('Files found:', files); // Debug log
+        console.log('Files found:', files.length); // Debug log
         res.json({
             success: true,
             message: 'Files retrieved successfully',
-            data: { files }
+            data: {
+                files,
+                total: files.length
+            }
         });
     } catch (error) {
         console.error('Error fetching files:', error);
@@ -108,7 +120,10 @@ router.get('/', async (req, res) => {
 router.post('/upload', uploadMiddleware, async (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
+            return res.status(400).json({
+                success: false,
+                message: 'No file uploaded'
+            });
         }
 
         const file = new File({
@@ -120,14 +135,20 @@ router.post('/upload', uploadMiddleware, async (req, res) => {
         });
 
         await file.save();
-        console.log('File saved:', file); // Debug log
+        console.log('File saved:', file.originalname); // Debug log
+        
         res.status(201).json({ 
+            success: true,
             message: 'File uploaded successfully',
             data: file
         });
     } catch (error) {
         console.error('Error uploading file:', error);
-        res.status(500).json({ message: 'Error uploading file' });
+        res.status(500).json({
+            success: false,
+            message: 'Error uploading file',
+            error: error.message
+        });
     }
 });
 
@@ -136,13 +157,20 @@ router.get('/download/:id', async (req, res) => {
     try {
         const file = await File.findById(req.params.id);
         if (!file) {
-            return res.status(404).json({ message: 'File not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'File not found'
+            });
         }
 
         res.download(file.path, file.originalname);
     } catch (error) {
         console.error('Error downloading file:', error);
-        res.status(500).json({ message: 'Error downloading file' });
+        res.status(500).json({
+            success: false,
+            message: 'Error downloading file',
+            error: error.message
+        });
     }
 });
 
@@ -151,7 +179,10 @@ router.delete('/:id', async (req, res) => {
     try {
         const file = await File.findById(req.params.id);
         if (!file) {
-            return res.status(404).json({ message: 'File not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'File not found'
+            });
         }
 
         // Delete file from storage
@@ -161,10 +192,17 @@ router.delete('/:id', async (req, res) => {
 
         // Delete file document from database
         await file.deleteOne();
-        res.json({ message: 'File deleted successfully' });
+        res.json({
+            success: true,
+            message: 'File deleted successfully'
+        });
     } catch (error) {
         console.error('Error deleting file:', error);
-        res.status(500).json({ message: 'Error deleting file' });
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting file',
+            error: error.message
+        });
     }
 });
 
