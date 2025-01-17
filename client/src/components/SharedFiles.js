@@ -5,7 +5,6 @@ import {
     Button, 
     Space, 
     Typography, 
-    Upload, 
     Modal,
     Progress,
     message,
@@ -31,7 +30,6 @@ import { filesApi } from '../services/api';
 import API_CONFIG from '../config/api.config';
 
 const { Title, Text } = Typography;
-const { Dragger } = Upload;
 
 const getFileIcon = (mimetype) => {
     if (mimetype.startsWith('image/')) return <FileImageOutlined />;
@@ -58,21 +56,24 @@ const SharedFiles = () => {
     const [uploadModalVisible, setUploadModalVisible] = useState(false);
     const [previewVisible, setPreviewVisible] = useState(false);
     const [previewFile, setPreviewFile] = useState(null);
+    const [searchText, setSearchText] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState(null);
 
     const fetchFiles = useCallback(async () => {
         try {
             setLoading(true);
             const response = await filesApi.getAll();
             
-            if (response?.data?.success && response.data.data?.files) {
-                setFiles(response.data.data.files);
+            if (response?.success && response.data?.files) {
+                setFiles(response.data.files);
             } else {
                 console.error('Unexpected response format:', response);
-                toast.error('Failed to load files: Invalid response format');
+                toast.error('Failed to load files');
             }
         } catch (error) {
             console.error('Error fetching files:', error);
-            toast.error('Failed to fetch files: ' + (error.response?.data?.message || error.message));
+            toast.error('Failed to fetch files: ' + (error.message || 'Unknown error'));
         } finally {
             setLoading(false);
         }
@@ -83,45 +84,60 @@ const SharedFiles = () => {
     }, [fetchFiles]);
 
     const onDrop = useCallback(async (acceptedFiles) => {
+        if (uploading) return; // Prevent multiple uploads
         setUploadModalVisible(false);
+        setUploading(true);
+        setUploadError(null);
         
-        for (const file of acceptedFiles) {
-            try {
-                const response = await filesApi.upload(file, (progressEvent) => {
-                    const progress = Math.round(
-                        (progressEvent.loaded * 100) / progressEvent.total
-                    );
-                    setUploadProgress(progress);
-                });
+        try {
+            for (const file of acceptedFiles) {
+                try {
+                    setUploadProgress(0);
+                    const formData = new FormData();
+                    formData.append('file', file);
 
-                if (response?.data) {
-                    toast.success(`${file.name} uploaded successfully`);
-                    await fetchFiles();
-                } else {
-                    throw new Error('Upload failed');
+                    const response = await filesApi.upload(formData, (progressEvent) => {
+                        const progress = Math.round(
+                            (progressEvent.loaded * 100) / progressEvent.total
+                        );
+                        setUploadProgress(progress);
+                    });
+
+                    if (response?.success) {
+                        toast.success(`${file.name} uploaded successfully`);
+                    } else {
+                        throw new Error('Upload failed');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    setUploadError(`Failed to upload ${file.name}: ${error.message || 'Unknown error'}`);
                 }
-            } catch (error) {
-                console.error('Upload error:', error);
-                toast.error(`Failed to upload ${file.name}: ${error.response?.data?.message || error.message}`);
             }
+            await fetchFiles(); // Refresh file list after all uploads
+        } finally {
+            setUploading(false);
+            setUploadProgress(0);
         }
-        setUploadProgress(0);
-    }, [fetchFiles]);
+    }, [fetchFiles, uploading]);
 
     const handleDelete = async (id) => {
         try {
-            await filesApi.delete(id);
-            toast.success('File deleted successfully');
-            await fetchFiles(); // Refetch files after deletion
+            const response = await filesApi.delete(id);
+            if (response?.success) {
+                toast.success('File deleted successfully');
+                await fetchFiles();
+            } else {
+                throw new Error('Delete failed');
+            }
         } catch (error) {
             console.error('Delete error:', error);
-            toast.error('Failed to delete file');
+            toast.error('Failed to delete file: ' + (error.message || 'Unknown error'));
         }
     };
 
     const handleDownload = (file) => {
         const link = document.createElement('a');
-        link.href = `/api${filesApi.getFileUrl(file._id)}`;
+        link.href = `${API_CONFIG.BASE_URL}${filesApi.getFileUrl(file._id)}`;
         link.download = file.originalname;
         document.body.appendChild(link);
         link.click();
@@ -130,7 +146,7 @@ const SharedFiles = () => {
 
     const handleCopyUrl = (file) => {
         const baseUrl = window.location.origin;
-        const url = `${baseUrl}/api${filesApi.getFileUrl(file._id)}`;
+        const url = `${baseUrl}${API_CONFIG.BASE_URL}${filesApi.getFileUrl(file._id)}`;
         navigator.clipboard.writeText(url)
             .then(() => message.success('URL copied to clipboard'))
             .catch(() => message.error('Failed to copy URL'));
@@ -141,14 +157,33 @@ const SharedFiles = () => {
             setPreviewFile(file);
             setPreviewVisible(true);
         } else {
-            window.open(`/api${filesApi.getFileUrl(file._id)}`, '_blank');
+            window.open(`${API_CONFIG.BASE_URL}${filesApi.getFileUrl(file._id)}`, '_blank');
         }
     };
 
-    const { getRootProps, getInputProps } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
-        multiple: true
+        multiple: true,
+        disabled: uploading,
+        accept: {
+            'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
+            'application/pdf': ['.pdf'],
+            'application/msword': ['.doc'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+            'application/vnd.ms-excel': ['.xls'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            'text/csv': ['.csv'],
+            'text/plain': ['.txt'],
+            'video/mp4': ['.mp4'],
+            'video/webm': ['.webm'],
+            'video/quicktime': ['.mov']
+        }
     });
+
+    const filteredFiles = files.filter(file => 
+        file.originalname.toLowerCase().includes(searchText.toLowerCase()) ||
+        file.mimetype.toLowerCase().includes(searchText.toLowerCase())
+    );
 
     const columns = [
         {
@@ -161,18 +196,21 @@ const SharedFiles = () => {
                     <Text>{text}</Text>
                 </Space>
             ),
+            sorter: (a, b) => a.originalname.localeCompare(b.originalname)
         },
         {
             title: 'Type',
             dataIndex: 'mimetype',
             key: 'mimetype',
             render: (mimetype) => <Text>{mimetype}</Text>,
+            sorter: (a, b) => a.mimetype.localeCompare(b.mimetype)
         },
         {
             title: 'Size',
             dataIndex: 'size',
             key: 'size',
             render: (size) => <Text>{formatFileSize(size)}</Text>,
+            sorter: (a, b) => a.size - b.size
         },
         {
             title: 'Actions',
@@ -202,97 +240,129 @@ const SharedFiles = () => {
                         <Button 
                             danger
                             icon={<DeleteOutlined />}
-                            onClick={() => handleDelete(record)}
+                            onClick={() => handleDelete(record._id)}
                         />
                     </Tooltip>
                 </Space>
-            ),
-        },
+            )
+        }
     ];
 
     return (
         <Card>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Title level={4}>Shared Files</Title>
-                <Button
-                    type="primary"
-                    icon={<UploadOutlined />}
-                    onClick={() => setUploadModalVisible(true)}
-                >
-                    Upload Files
-                </Button>
-            </div>
+            <Space direction="vertical" style={{ width: '100%' }}>
+                <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
+                    <Title level={4}>Shared Files</Title>
+                    <Space>
+                        <Input.Search
+                            placeholder="Search files..."
+                            value={searchText}
+                            onChange={e => setSearchText(e.target.value)}
+                            style={{ width: 200 }}
+                        />
+                        <Button 
+                            type="primary" 
+                            icon={<UploadOutlined />}
+                            onClick={() => setUploadModalVisible(true)}
+                            disabled={uploading}
+                        >
+                            Upload
+                        </Button>
+                    </Space>
+                </Space>
+
+                <Table
+                    dataSource={filteredFiles}
+                    columns={columns}
+                    loading={loading}
+                    rowKey="_id"
+                    pagination={{
+                        showSizeChanger: true,
+                        showTotal: (total) => `Total ${total} files`
+                    }}
+                />
+            </Space>
 
             <Modal
                 title="Upload Files"
                 open={uploadModalVisible}
-                onCancel={() => setUploadModalVisible(false)}
+                onCancel={() => !uploading && setUploadModalVisible(false)}
                 footer={null}
-                width={600}
+                closable={!uploading}
+                maskClosable={!uploading}
+                destroyOnClose
             >
-                <div 
+                <div
                     {...getRootProps()} 
                     style={{
+                        padding: '20px',
+                        background: isDragActive ? '#f0f8ff' : '#fff',
                         border: '2px dashed #d9d9d9',
                         borderRadius: '4px',
-                        padding: '20px',
-                        textAlign: 'center',
                         cursor: 'pointer',
-                        marginBottom: '16px'
+                        transition: 'all 0.3s',
+                        textAlign: 'center'
                     }}
                 >
                     <input {...getInputProps()} />
-                    <p>
-                        <InboxOutlined style={{ fontSize: '48px', color: '#40a9ff' }} />
+                    <p style={{ marginBottom: '8px' }}>
+                        <InboxOutlined style={{ 
+                            color: uploading ? '#ccc' : '#40a9ff',
+                            fontSize: '48px'
+                        }} />
                     </p>
-                    <p>Drag and drop files here, or click to select files</p>
-                    <p style={{ color: '#888' }}>
+                    <p style={{ 
+                        marginBottom: '8px',
+                        color: uploading ? '#ccc' : '#000'
+                    }}>
+                        {uploading ? 'Uploading...' : 'Click or drag files to this area to upload'}
+                    </p>
+                    <p style={{ 
+                        color: '#888',
+                        fontSize: '12px'
+                    }}>
                         Supported files: Images, Videos, PDFs, Office documents, CSV, Text files (Max: 5MB)
                     </p>
+                    {uploadError && (
+                        <p style={{ color: 'red' }}>{uploadError}</p>
+                    )}
                 </div>
+                {uploadProgress > 0 && (
+                    <Progress 
+                        percent={uploadProgress} 
+                        status={uploading ? 'active' : 'normal'}
+                        style={{ marginTop: 16 }} 
+                    />
+                )}
             </Modal>
 
             <Modal
                 title="File Preview"
                 open={previewVisible}
-                onCancel={() => setPreviewVisible(false)}
+                onCancel={() => {
+                    setPreviewVisible(false);
+                    setPreviewFile(null);
+                }}
                 footer={null}
                 width={800}
+                destroyOnClose
             >
                 {previewFile && (
                     previewFile.mimetype.startsWith('image/') ? (
-                        <img 
-                            src={`/api${filesApi.getFileUrl(previewFile._id)}`}
+                        <img
                             alt={previewFile.originalname}
+                            src={`${API_CONFIG.BASE_URL}${filesApi.getFileUrl(previewFile._id)}`}
                             style={{ width: '100%' }}
                         />
-                    ) : (
-                        <video 
-                            src={`/api${filesApi.getFileUrl(previewFile._id)}`}
+                    ) : previewFile.mimetype.startsWith('video/') ? (
+                        <video
                             controls
                             style={{ width: '100%' }}
+                            src={`${API_CONFIG.BASE_URL}${filesApi.getFileUrl(previewFile._id)}`}
                         />
-                    )
+                    ) : null
                 )}
             </Modal>
-
-            {uploadProgress > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                    <Progress percent={uploadProgress} />
-                </div>
-            )}
-
-            <Table
-                columns={columns}
-                dataSource={files}
-                rowKey="_id"
-                loading={loading}
-                pagination={{
-                    defaultPageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `Total ${total} files`
-                }}
-            />
         </Card>
     );
 };

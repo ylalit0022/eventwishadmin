@@ -1,109 +1,145 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Space, Typography } from 'antd';
+import { Row, Col, Card, Statistic, List, Typography, Spin, message, Tag } from 'antd';
 import {
     FileOutlined,
-    EyeOutlined,
-    MobileOutlined,
+    ShareAltOutlined,
     GiftOutlined,
-    RiseOutlined
+    DollarOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
-import { dashboardApi, sharedWishesApi, adMobApi } from '../services/api';
+import { dashboardApi } from '../services/api';
+import { formatDistanceToNow } from 'date-fns';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({
-        templates: 0,
-        totalViews: 0,
-        activeAds: 0,
-        sharedWishes: 0,
-        recentViews: 0
+    const [dashboardData, setDashboardData] = useState({
+        totalFiles: 0,
+        totalSharedFiles: 0,
+        totalSharedWishes: 0,
+        totalAdMob: 0,
+        recentActivity: []
     });
 
-    const fetchDashboardData = async () => {
-        try {
-            setLoading(true);
-            const [dashboardStats, wishesAnalytics] = await Promise.all([
-                dashboardApi.getSummary(),
-                sharedWishesApi.getAnalytics()
-            ]);
-
-            if (dashboardStats?.data?.success && wishesAnalytics?.data?.success) {
-                const dashboard = dashboardStats.data.data;
-                const wishes = wishesAnalytics.data.data;
-
-                setStats({
-                    templates: dashboard.templateCount || 0,
-                    totalViews: wishes.total.views || 0,
-                    activeAds: dashboard.activeAdCount || 0,
-                    sharedWishes: wishes.total.wishes || 0,
-                    recentViews: wishes.views.daily || 0
-                });
-            }
-        } catch (error) {
-            console.error('Error fetching dashboard data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
+        const fetchDashboardData = async () => {
+            try {
+                setLoading(true);
+                const response = await dashboardApi.getSummary();
+                if (response.success) {
+                    setDashboardData(response.data);
+                } else {
+                    message.error('Failed to fetch dashboard data');
+                }
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+                message.error('Error fetching dashboard data');
+            } finally {
+                setLoading(false);
+            }
+        };
+
         fetchDashboardData();
     }, []);
 
-    return (
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Title level={4}>Dashboard Overview</Title>
+    const getActivityIcon = (type) => {
+        switch (type) {
+            case 'wish':
+                return <GiftOutlined />;
+            case 'file':
+                return <FileOutlined />;
+            default:
+                return <ClockCircleOutlined />;
+        }
+    };
 
+    if (loading) {
+        return (
+            <div style={{ textAlign: 'center', padding: '50px' }}>
+                <Spin size="large" />
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <Title level={2}>Dashboard</Title>
+            
+            {/* Statistics Cards */}
             <Row gutter={[16, 16]}>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card loading={loading}>
+                    <Card>
                         <Statistic
-                            title="Total Templates"
-                            value={stats.templates}
+                            title="Total Files"
+                            value={dashboardData.totalFiles}
                             prefix={<FileOutlined />}
                         />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card loading={loading}>
+                    <Card>
                         <Statistic
-                            title="Total Views"
-                            value={stats.totalViews}
-                            prefix={<EyeOutlined />}
+                            title="Shared Files"
+                            value={dashboardData.totalSharedFiles}
+                            prefix={<ShareAltOutlined />}
                         />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card loading={loading}>
-                        <Statistic
-                            title="Active Ads"
-                            value={stats.activeAds}
-                            prefix={<MobileOutlined />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={12} lg={6}>
-                    <Card loading={loading}>
+                    <Card>
                         <Statistic
                             title="Shared Wishes"
-                            value={stats.sharedWishes}
+                            value={dashboardData.totalSharedWishes}
                             prefix={<GiftOutlined />}
                         />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card loading={loading}>
+                    <Card>
                         <Statistic
-                            title="Recent Views (24h)"
-                            value={stats.recentViews}
-                            prefix={<RiseOutlined />}
+                            title="Active AdMob"
+                            value={dashboardData.totalAdMob}
+                            prefix={<DollarOutlined />}
                         />
                     </Card>
                 </Col>
             </Row>
-        </Space>
+
+            {/* Recent Activity */}
+            <Card title="Recent Activity" style={{ marginTop: '24px' }}>
+                <List
+                    dataSource={dashboardData.recentActivity}
+                    renderItem={item => (
+                        <List.Item>
+                            <List.Item.Meta
+                                avatar={getActivityIcon(item.type)}
+                                title={item.title}
+                                description={
+                                    <div>
+                                        <Text type="secondary">{item.description}</Text>
+                                        <br />
+                                        <Text type="secondary">
+                                            {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
+                                        </Text>
+                                    </div>
+                                }
+                            />
+                            {item.status && (
+                                <Tag color={
+                                    item.status === 'pending' ? 'orange' :
+                                    item.status === 'sent' ? 'blue' :
+                                    item.status === 'viewed' ? 'green' :
+                                    'red'
+                                }>
+                                    {item.status}
+                                </Tag>
+                            )}
+                        </List.Item>
+                    )}
+                />
+            </Card>
+        </div>
     );
 };
 

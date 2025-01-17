@@ -1,49 +1,62 @@
 const mongoose = require('mongoose');
 
 const templateSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: true,
-        trim: true
+    title: { 
+        type: String, 
+        required: [true, 'Title is required'], 
+        trim: true 
     },
-    category: {
-        type: String,
-        required: true,
-        trim: true
+    category: { 
+        type: String, 
+        required: [true, 'Category is required'], 
+        trim: true 
     },
-    tags: [{
-        type: String,
-        trim: true
-    }],
-    htmlContent: {
-        type: String,
-        required: true
+    htmlContent: { 
+        type: String, 
+        required: [true, 'HTML content is required'] 
     },
-    cssContent: {
-        type: String,
-        default: ''
+    cssContent: { 
+        type: String, 
+        default: '' 
     },
-    jsContent: {
-        type: String,
-        default: ''
+    jsContent: { 
+        type: String, 
+        default: '' 
     },
-    previewUrl: {
-        type: String,
-        trim: true
+    previewUrl: { 
+        type: String 
     },
-    isActive: {
-        type: Boolean,
-        default: true
+    status: { 
+        type: Boolean, 
+        default: true 
+    },
+    createdAt: { 
+        type: Date, 
+        default: Date.now 
+    },
+    updatedAt: { 
+        type: Date, 
+        default: Date.now 
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+        transform: function(doc, ret) {
+            ret.id = ret._id;
+            delete ret._id;
+            delete ret.__v;
+        }
+    }
 });
 
-// Add text indexes for search
-templateSchema.index({
-    title: 'text',
-    category: 'text',
-    tags: 'text'
+// Middleware to update the updatedAt field
+templateSchema.pre('save', function(next) {
+    this.updatedAt = Date.now();
+    next();
 });
+
+// Add indexes for better query performance
+templateSchema.index({ status: 1, category: 1, createdAt: -1 });
+templateSchema.index({ title: 'text' });
 
 module.exports = mongoose.model('Template', templateSchema);

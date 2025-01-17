@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Layout as AntLayout, Button } from 'antd';
+import { Layout as AntLayout, Button, theme } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import Sidebar from './Sidebar';
 
 const { Content } = AntLayout;
+const { useToken } = theme;
 
 const Layout = () => {
+    const { token } = useToken();
     const [collapsed, setCollapsed] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -37,7 +39,7 @@ const Layout = () => {
             >
                 <div style={{
                     padding: '0 24px',
-                    background: '#fff',
+                    background: token.colorBgContainer,
                     display: 'flex',
                     alignItems: 'center',
                     height: 64,
@@ -52,22 +54,18 @@ const Layout = () => {
                         onClick={toggleSidebar}
                         style={{
                             fontSize: '16px',
-                            width: 48,
-                            height: 48,
-                            marginLeft: -12
+                            width: 64,
+                            height: 64,
                         }}
                     />
                 </div>
-                <Content
-                    style={{
-                        margin: '24px',
-                        padding: 24,
-                        minHeight: 280,
-                        borderRadius: '8px',
-                        background: '#fff',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
-                    }}
-                >
+                <Content style={{ 
+                    margin: '24px 16px', 
+                    padding: 24, 
+                    background: token.colorBgContainer,
+                    borderRadius: token.borderRadius,
+                    minHeight: 280 
+                }}>
                     <Outlet />
                 </Content>
             </AntLayout>

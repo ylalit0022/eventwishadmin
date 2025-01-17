@@ -1,147 +1,328 @@
 import axios from 'axios';
 import API_CONFIG from '../config/api.config';
-import { message } from 'antd';
 
-// Base URL configuration
-const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000';
-axios.defaults.baseURL = API_BASE_URL;
-
-const API_URL = API_CONFIG.BASE_URL;
-
-// Create axios instance with base URL
+// Create axios instance
 const api = axios.create({
-    baseURL: API_URL,
+    baseURL: API_CONFIG.BASE_URL,
     headers: {
         'Content-Type': 'application/json'
     }
 });
 
-// Add request interceptor
+// Request interceptor
 api.interceptors.request.use(
     (config) => {
+        if (config.data instanceof FormData) {
+            delete config.headers['Content-Type'];
+        }
+        
         const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
-// Add response interceptor
+// Response interceptor
 api.interceptors.response.use(
-    (response) => response.data,
-    (error) => {
-        const errorMessage = error.response?.data?.message || error.message || 'An error occurred';
-        message.error(errorMessage);
-        return Promise.reject(error);
+    response => {
+        // For blob responses (file downloads), return as is
+        if (response.config.responseType === 'blob') {
+            return response;
+        }
+        // For regular responses, return data
+        return response.data;
+    },
+    error => {
+        // Handle error response
+        if (error.response) {
+            // The request was made and the server responded with a status code
+            // that falls out of the range of 2xx
+            const errorMessage = error.response.data?.message || 'An error occurred';
+            return Promise.reject({
+                ...error,
+                message: errorMessage
+            });
+        } else if (error.request) {
+            // The request was made but no response was received
+            return Promise.reject({
+                ...error,
+                message: 'No response from server'
+            });
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            return Promise.reject({
+                ...error,
+                message: error.message || 'Request failed'
+            });
+        }
     }
 );
 
-// Templates API
-export const templatesApi = {
-    // Get all templates with pagination and filters
-    getAll: (params) => api.get('/templates', { params }),
+// AdMob API
+export const adMobApi = {
+    async getAll(params) {
+        try {
+            const response = await api.get('/admob-ads', { params });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
 
-    // Get template by ID
-    getById: (id) => api.get(`/templates/${id}`),
+    async create(data) {
+        try {
+            const response = await api.post('/admob-ads', data);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
 
-    // Create new template
-    create: (data) => api.post('/templates', data),
+    async update(id, data) {
+        try {
+            const response = await api.put(`/admob-ads/${id}`, data);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
 
-    // Update template
-    update: (id, data) => api.put(`/templates/${id}`, data),
+    async delete(id) {
+        try {
+            const response = await api.delete(`/admob-ads/${id}`);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
 
-    // Delete template
-    delete: (id) => api.delete(`/templates/${id}`),
-
-    // Get template categories
-    getCategories: () => api.get(API_CONFIG.ENDPOINTS.TEMPLATES.CATEGORIES),
-
-    // Bulk import templates
-    bulkImport: (templates) => api.post(API_CONFIG.ENDPOINTS.TEMPLATES.BULK_IMPORT, { templates }),
-
-    // Get template stats
-    getStats: () => api.get(API_CONFIG.ENDPOINTS.TEMPLATES.STATS)
-};
-
-// Dashboard API
-export const dashboardApi = {
-    // Get recent activity
-    getActivity: () => api.get(API_CONFIG.ENDPOINTS.DASHBOARD.ACTIVITY),
-
-    // Get dashboard stats
-    getStats: () => api.get(API_CONFIG.ENDPOINTS.DASHBOARD.STATS),
-
-    // Get dashboard summary
-    getSummary: () => api.get('/dashboard/summary'),
-
-    // Get dashboard stats
-    getDashboardStats: () => api.get('/dashboard/stats')
+    async toggleStatus(id) {
+        try {
+            const response = await api.patch(`/admob-ads/${id}/status`);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
 };
 
 // Files API
 export const filesApi = {
-    // Upload file
-    upload: (file, onProgress) => {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        return api.post(API_CONFIG.ENDPOINTS.FILES.UPLOAD, formData, {
+    getAll() {
+        return api.get('/files');
+    },
+    upload(formData, onProgress) {
+        return api.post('/files/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             },
-            onUploadProgress: (progressEvent) => {
-                if (onProgress) {
-                    onProgress(progressEvent);
-                }
-            }
+            onUploadProgress: onProgress ? (progressEvent) => {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                onProgress(percentCompleted);
+            } : undefined
         });
     },
-
-    // Get file list
-    getAll: (params) => api.get('/files', { params }),
-
-    // Delete file
-    delete: (id) => api.delete(`/files/${id}`),
-
-    // Download file
-    download: (id) => api.get(`${API_CONFIG.ENDPOINTS.FILES.DOWNLOAD}/${id}`, { responseType: 'blob' }),
-
-    // Get file URL
-    getFileUrl: (id) => `${API_URL}${API_CONFIG.ENDPOINTS.FILES.DOWNLOAD}/${id}`
+    delete(id) {
+        return api.delete(`/files/${id}`);
+    },
+    getFileUrl(id) {
+        return `${API_CONFIG.BASE_URL}/files/download/${id}`;
+    }
 };
 
-// AdMob API
-export const adMobApi = {
-    getAll: (params) => api.get('/admob', { params }),
-    create: (data) => api.post('/admob', data),
-    update: (id, data) => api.put(`/admob/${id}`, data),
-    delete: (id) => api.delete(`/admob/${id}`),
-    toggle: (id) => api.patch(`/admob/${id}/toggle`),
-    getTypes: () => api.get('/admob/types')
+// Shared Files API
+export const sharedFilesApi = {
+    getAll() {
+        return api.get('/shared-files');
+    },
+    share(fileId, data) {
+        return api.post(`/shared-files/share/${fileId}`, data);
+    },
+    unshare(fileId) {
+        return api.delete(`/shared-files/unshare/${fileId}`);
+    }
 };
 
 // Shared Wishes API
 export const sharedWishesApi = {
-    getAll: (params) => api.get('/shared-wishes', { params }),
-    getAnalytics: () => api.get('/shared-wishes/analytics')
+    async getAll(params) {
+        try {
+            const response = await api.get('/shared-wishes', { params });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+    async getAnalytics() {
+        try {
+            const response = await api.get('/shared-wishes/analytics');
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+    async export(filter) {
+        try {
+            const response = await api.get('/shared-wishes/export', {
+                params: { filter },
+                responseType: 'blob'
+            });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+    async exportEnhanced(filter) {
+        try {
+            const response = await api.get('/shared-wishes/export/enhanced', {
+                params: { filter },
+                responseType: 'blob'
+            });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
+};
+
+// Dashboard API
+export const dashboardApi = {
+    getActivity() {
+        return api.get('/dashboard/activity');
+    },
+    getSummary() {
+        return api.get('/dashboard/summary');
+    },
+    getStats() {
+        return api.get('/dashboard/stats');
+    }
 };
 
 // Auth API
 export const authApi = {
     async login(credentials) {
-        return await api.post(API_CONFIG.ENDPOINTS.AUTH.LOGIN, credentials);
+        return await api.post(`${API_CONFIG.ENDPOINTS.AUTH.LOGIN}`, credentials);
     },
     
     async logout() {
-        return await api.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
+        return await api.post(`${API_CONFIG.ENDPOINTS.AUTH.LOGOUT}`);
     },
     
     async refreshToken() {
-        return await api.post(API_CONFIG.ENDPOINTS.AUTH.REFRESH);
+        return await api.post(`${API_CONFIG.ENDPOINTS.AUTH.REFRESH}`);
+    }
+};
+
+// Templates API
+export const templatesApi = {
+    async getAll(params) {
+        try {
+            const response = await api.get('/templates', { params });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async create(data) {
+        try {
+            const response = await api.post('/templates', data);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async update(id, data) {
+        try {
+            const response = await api.put(`/templates/${id}`, data);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async delete(id) {
+        try {
+            const response = await api.delete(`/templates/${id}`);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async toggleStatus(id) {
+        try {
+            const response = await api.patch(`/templates/${id}/status`);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async preview(data) {
+        try {
+            const response = await api.post('/templates/preview', data);
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async import(formData) {
+        try {
+            const response = await api.post('/templates/import', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async export(params) {
+        try {
+            const response = await api.get('/templates/export', {
+                params,
+                responseType: 'blob'
+            });
+            
+            // Create and trigger download
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `templates-${new Date().toISOString()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
     }
 };
 

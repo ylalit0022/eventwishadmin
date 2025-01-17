@@ -1,63 +1,96 @@
 const mongoose = require('mongoose');
 
-const adTypes = [
-    { value: 'banner', label: 'Banner Ad' },
-    { value: 'interstitial', label: 'Interstitial Ad' },
-    { value: 'rewarded', label: 'Rewarded Ad' },
-    { value: 'native', label: 'Native Ad' },
-    { value: 'app_open', label: 'App Open Ad' }
-];
+const adTypes = ['Banner', 'Interstitial', 'Rewarded'];
+
+// Set strict query mode
+mongoose.set('strictQuery', true);
 
 const AdMobSchema = new mongoose.Schema({
-    name: {
+    adName: {
         type: String,
         required: [true, 'Ad name is required'],
         trim: true
     },
     adUnitId: {
         type: String,
-        required: [true, 'Ad Unit ID is required'],
+        required: [true, 'Ad unit ID is required'],
         unique: true,
-        trim: true
+        trim: true,
+        index: true
     },
     adType: {
         type: String,
         required: [true, 'Ad type is required'],
         enum: {
-            values: adTypes.map(type => type.value),
+            values: adTypes,
             message: 'Invalid ad type'
         }
     },
     status: {
         type: Boolean,
         default: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-// Static method to get ad types
-AdMobSchema.statics.getAdTypes = function() {
-    return adTypes;
-};
-
-// Pre-save middleware to update timestamps
+// Middleware to update the updatedAt field
 AdMobSchema.pre('save', function(next) {
-    this.updatedAt = Date.now();
+    this.updatedAt = new Date();
     next();
 });
 
 const AdMob = mongoose.model('AdMob', AdMobSchema);
 
-module.exports = {
-    AdMob,
-    adTypes
-};
+const admobAdSchema = new mongoose.Schema({
+    adName: { 
+        type: String, 
+        required: [true, 'Ad name is required'], 
+        trim: true 
+    },
+    adUnitId: { 
+        type: String, 
+        required: [true, 'Ad unit ID is required'], 
+        trim: true,
+        unique: true 
+    },
+    adType: { 
+        type: String, 
+        required: [true, 'Ad type is required'],
+        enum: ['Banner', 'Interstitial', 'Rewarded']
+    },
+    status: { 
+        type: Boolean, 
+        default: true 
+    },
+    createdAt: { 
+        type: Date, 
+        default: Date.now 
+    },
+    updatedAt: { 
+        type: Date, 
+        default: Date.now 
+    }
+}, {
+    timestamps: true,
+    toJSON: {
+        transform: function(doc, ret) {
+            ret.id = ret._id;
+            delete ret._id;
+            delete ret.__v;
+            return ret;
+        }
+    }
+});
+
+// Middleware to update the updatedAt field
+admobAdSchema.pre('save', function(next) {
+    this.updatedAt = Date.now();
+    next();
+});
+
+const AdmobAd = mongoose.model('AdmobAd', admobAdSchema);
+
+module.exports = { AdMob, AdmobAd, adTypes };

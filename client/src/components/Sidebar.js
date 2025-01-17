@@ -1,52 +1,40 @@
-import React, { useState } from 'react';
-import { Layout, Menu } from 'antd';
+import React from 'react';
+import { Layout, Menu, theme } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     DashboardOutlined,
-    FileOutlined,
-    FolderOutlined,
-    MobileOutlined,
     GiftOutlined,
-    FormOutlined
+    FileOutlined,
+    SettingOutlined,
+    FileTextOutlined,
+    HomeOutlined,
+    FileImageOutlined,
+    DollarOutlined
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
+const { useToken } = theme;
+
+function getItem(label, key, icon, children) {
+    return {
+        key,
+        icon,
+        children,
+        label,
+    };
+}
 
 const menuItems = [
-    {
-        key: '/',
-        icon: <DashboardOutlined />,
-        label: 'Dashboard',
-        path: '/'
-    },
-    {
-        key: '/templates',
-        icon: <FileOutlined />,
-        label: 'Templates',
-        path: '/templates'
-    },
-    {
-        key: '/files',
-        icon: <FolderOutlined />,
-        label: 'Files',
-        path: '/files'
-    },
-    {
-        key: '/admob',
-        icon: <MobileOutlined />,
-        label: 'AdMob',
-        path: '/admob'
-    },
-    {
-        key: '/shared-wishes',
-        icon: <GiftOutlined />,
-        label: 'Shared Wishes',
-        path: '/shared-wishes'
-    },
+    getItem('Dashboard', '/dashboard', <HomeOutlined />),
+    getItem('Templates', '/templates', <FileImageOutlined />),
+    getItem('Shared Wishes', '/shared-wishes', <GiftOutlined />),
+    getItem('Shared Files', '/shared-files', <FileOutlined />),
+    getItem('AdMob', '/admob', <DollarOutlined />),
+    getItem('Settings', '/settings', <SettingOutlined />),
 ];
 
-const Sidebar = ({ darkMode }) => {
-    const [collapsed, setCollapsed] = useState(false);
+const Sidebar = ({ collapsed, isMobile }) => {
+    const { token } = useToken();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -55,42 +43,49 @@ const Sidebar = ({ darkMode }) => {
     };
 
     return (
-        <Sider 
-            collapsible 
-            collapsed={collapsed} 
-            onCollapse={setCollapsed}
-            theme={darkMode ? 'dark' : 'light'}
+        <Sider
+            trigger={null}
+            collapsible
+            collapsed={collapsed}
+            breakpoint="lg"
             style={{
                 overflow: 'auto',
                 height: '100vh',
-                position: 'sticky',
-                top: 0,
+                position: 'fixed',
                 left: 0,
+                top: 0,
+                bottom: 0,
+                zIndex: 3,
+                background: token.colorBgContainer,
+                boxShadow: '2px 0 8px rgba(0,0,0,0.06)'
             }}
         >
             <div style={{ 
-                height: 32, 
-                margin: 16, 
-                background: 'rgba(255, 255, 255, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
+                height: 64, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '16px',
+                borderBottom: `1px solid ${token.colorBorderSecondary}`
             }}>
-                <span style={{ 
-                    color: darkMode ? '#fff' : '#000',
-                    fontWeight: 'bold',
-                    fontSize: collapsed ? '14px' : '18px'
-                }}>
-                    {collapsed ? 'EW' : 'EventWishes'}
-                </span>
+                <img 
+                    src="/logo.png" 
+                    alt="Logo" 
+                    style={{ 
+                        height: collapsed ? '32px' : '40px',
+                        transition: 'all 0.2s'
+                    }} 
+                />
             </div>
-            
             <Menu
-                theme={darkMode ? 'dark' : 'light'}
+                theme="light"
                 mode="inline"
                 selectedKeys={[location.pathname]}
                 items={menuItems}
                 onClick={handleMenuClick}
+                style={{
+                    borderRight: 'none'
+                }}
             />
         </Sider>
     );

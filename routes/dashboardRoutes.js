@@ -1,62 +1,59 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
-const Template = require('../models/Template');
-const AdMob = require('../models/AdMob');
-const SharedWishes = require('../models/SharedWishes');
-
-// Get recent activity
-router.get('/recent-activity', async (req, res) => {
-    try {
-        // Mock data for recent activity since we don't have an Activity model yet
-        const activities = [
-            {
-                id: 1,
-                type: 'template_created',
-                description: 'New template created',
-                user: {
-                    name: 'Admin User',
-                    email: 'admin@example.com'
-                },
-                createdAt: new Date()
-            },
-            {
-                id: 2,
-                type: 'file_uploaded',
-                description: 'New file uploaded',
-                user: {
-                    name: 'Admin User',
-                    email: 'admin@example.com'
-                },
-                createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) // 1 day ago
-            }
-        ];
-
-        res.json({
-            success: true,
-            activities
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+const SharedWish = require('../models/SharedWish');
+const AdMob = require('../models/AdMob').AdMob;
+const File = require('../models/File');
+const SharedFile = require('../models/SharedFile');
 
 // Get dashboard summary
 router.get('/summary', async (req, res) => {
     try {
-        const [templateCount, activeAdCount, sharedWishesCount] = await Promise.all([
-            Template.countDocuments(),
-            AdMob.countDocuments({ status: true }),
-            SharedWishes.countDocuments()
+        const [totalFiles, totalSharedFiles, totalSharedWishes, totalAdMob] = await Promise.all([
+            File.countDocuments(),
+            SharedFile.countDocuments(),
+            SharedWish.countDocuments(),
+            AdMob.countDocuments()
         ]);
+
+        // Get recent activity
+        const recentActivity = await Promise.all([
+            // Recent shared wishes
+            SharedWish.find()
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .select('recipientName senderName createdAt status'),
+            // Recent shared files
+            SharedFile.find()
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .select('fileName sharedWith createdAt')
+        ]);
+
+        // Format recent activity
+        const formattedActivity = [
+            ...recentActivity[0].map(wish => ({
+                type: 'wish',
+                title: `Wish shared with ${wish.recipientName}`,
+                description: `From ${wish.senderName}`,
+                status: wish.status,
+                timestamp: wish.createdAt
+            })),
+            ...recentActivity[1].map(file => ({
+                type: 'file',
+                title: `File shared: ${file.fileName}`,
+                description: `Shared with ${file.sharedWith.length} users`,
+                timestamp: file.createdAt
+            }))
+        ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
 
         res.json({
             success: true,
-            message: 'Dashboard summary retrieved successfully',
             data: {
-                templateCount,
-                activeAdCount,
-                sharedWishesCount
+                totalFiles,
+                totalSharedFiles,
+                totalSharedWishes,
+                totalAdMob,
+                recentActivity: formattedActivity
             }
         });
     } catch (error) {
@@ -72,31 +69,59 @@ router.get('/summary', async (req, res) => {
 // Get dashboard stats
 router.get('/stats', async (req, res) => {
     try {
-        const now = new Date();
-        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
-        
-        const [
-            totalTemplates,
-            totalWishes,
-            recentWishes,
-            activeAds
-        ] = await Promise.all([
-            Template.countDocuments(),
-            SharedWishes.countDocuments(),
-            SharedWishes.countDocuments({
-                lastViewedAt: { $gte: oneDayAgo }
-            }),
-            AdMob.countDocuments({ status: true })
+        // Get stats for the last 7 days
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const [fileStats, wishStats] = await Promise.all([
+            // File sharing stats
+            SharedFile.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: sevenDaysAgo }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            $dateToString: {
+                                format: '%Y-%m-%d',
+                                date: '$createdAt'
+                            }
+                        },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]),
+            // Wish sharing stats
+            SharedWish.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: sevenDaysAgo }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            $dateToString: {
+                                format: '%Y-%m-%d',
+                                date: '$createdAt'
+                            }
+                        },
+                        count: { $sum: 1 },
+                        views: { $sum: '$views' }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ])
         ]);
 
         res.json({
             success: true,
-            message: 'Dashboard stats retrieved successfully',
             data: {
-                totalTemplates,
-                totalWishes,
-                recentWishes,
-                activeAds
+                fileStats,
+                wishStats
             }
         });
     } catch (error) {
