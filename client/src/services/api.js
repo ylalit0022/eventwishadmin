@@ -389,10 +389,31 @@ export const authApi = {
 
 // Templates API
 export const templatesApi = {
-    async getAll(params) {
+    async getAll(params = {}) {
         try {
-            const response = await api.get(API_CONFIG.ENDPOINTS.TEMPLATES.BASE, { params });
-            return response;
+            const response = await axios.get(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TEMPLATES.BASE}`, {
+                params,
+                headers: {
+                    ...API_CONFIG.HEADERS,
+                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (response.data.success) {
+                return {
+                    success: true,
+                    data: {
+                        templates: response.data.data.templates.map(template => ({
+                            ...template,
+                            key: template.id
+                        })),
+                        pagination: response.data.data.pagination,
+                        filters: response.data.data.filters
+                    }
+                };
+            }
+
+            throw new Error(response.data.message || 'Failed to fetch templates');
         } catch (error) {
             console.error('API Error:', error);
             throw error;

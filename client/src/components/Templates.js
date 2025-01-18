@@ -346,7 +346,28 @@ const Templates = () => {
     };
 
     const handlePreview = (record) => {
-        setPreviewContent(record.htmlContent);
+        // Combine HTML, CSS and JS into a single HTML document
+        const combinedContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${record.title}</title>
+                <style>
+                    ${record.cssContent || ''}
+                </style>
+            </head>
+            <body>
+                ${record.htmlContent || ''}
+                <script>
+                    ${record.jsContent || ''}
+                </script>
+            </body>
+            </html>
+        `;
+
+        setPreviewContent(combinedContent);
         setPreviewVisible(true);
     };
 
@@ -526,10 +547,21 @@ const Templates = () => {
                 title="Preview Template"
                 open={previewVisible}
                 onCancel={() => setPreviewVisible(false)}
-                width={800}
+                width="80%"
+                style={{ top: 20 }}
                 footer={null}
             >
-                <div dangerouslySetInnerHTML={{ __html: previewContent }} />
+                <iframe
+                    srcDoc={previewContent}
+                    style={{
+                        width: '100%',
+                        height: '600px',
+                        border: '1px solid #d9d9d9',
+                        borderRadius: '4px'
+                    }}
+                    sandbox="allow-scripts"
+                    title="Template Preview"
+                />
             </Modal>
         </div>
     );
