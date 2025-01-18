@@ -162,30 +162,11 @@ const SharedWishes = () => {
     const handleExport = async () => {
         try {
             setExportLoading(true);
-            const response = await sharedWishesApi.exportEnhanced(filter);
-            
-            if (!response) {
-                throw new Error('No data received from server');
-            }
-
-            // Create and trigger download
-            const url = window.URL.createObjectURL(new Blob([response], { type: 'text/csv' }));
-            const link = document.createElement('a');
-            link.href = url;
-            
-            // Get current date for filename
-            const date = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-            link.setAttribute('download', `wishes-${filter}-${date}.csv`);
-            
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            
-            message.success('Export completed successfully');
+            await sharedWishesApi.exportEnhanced(filter);
+            message.success('Export successful');
         } catch (error) {
             console.error('Export error:', error);
-            message.error(error.message || 'Failed to export data. Please try again.');
+            message.error(error.message || 'Failed to export data');
         } finally {
             setExportLoading(false);
         }

@@ -297,11 +297,12 @@ export const sharedWishesApi = {
         }
     },
 
-    async exportData() {
+    async exportEnhanced(filter) {
         try {
             const response = await axios({
                 method: 'get',
                 url: `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SHARED_WISHES.EXPORT}`,
+                params: { filter },
                 responseType: 'blob',
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -309,7 +310,7 @@ export const sharedWishesApi = {
             });
 
             // Create file name
-            const fileName = `wishes-${new Date().toISOString().split('T')[0]}.csv`;
+            const fileName = `wishes-${filter}-${new Date().toISOString().split('T')[0]}.csv`;
 
             // Create download link
             const url = window.URL.createObjectURL(new Blob([response.data]));
