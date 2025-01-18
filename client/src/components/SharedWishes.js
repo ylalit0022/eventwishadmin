@@ -162,30 +162,14 @@ const SharedWishes = () => {
     const handleExport = async () => {
         try {
             setExportLoading(true);
-            let exportFilter;
+            const response = await sharedWishesApi.exportEnhanced(filter);
             
-            // Convert filter to appropriate format for backend
-            switch (filter) {
-                case 'today':
-                    exportFilter = 'today';
-                    break;
-                case 'week':
-                    exportFilter = 'week';
-                    break;
-                case 'month':
-                    exportFilter = 'month';
-                    break;
-                case 'all':
-                    exportFilter = 'all';
-                    break;
-                default:
-                    exportFilter = 'today';
+            if (!response) {
+                throw new Error('No data received from server');
             }
 
-            const response = await sharedWishesApi.exportEnhanced(exportFilter);
-            
             // Create and trigger download
-            const url = window.URL.createObjectURL(new Blob([response]));
+            const url = window.URL.createObjectURL(new Blob([response], { type: 'text/csv' }));
             const link = document.createElement('a');
             link.href = url;
             
@@ -200,16 +184,16 @@ const SharedWishes = () => {
             
             message.success('Export completed successfully');
         } catch (error) {
-            console.error('Error exporting wishes:', error);
-            message.error(error.response?.data?.message || 'Failed to export wishes');
+            console.error('Export error:', error);
+            message.error(error.message || 'Failed to export data. Please try again.');
         } finally {
             setExportLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    const formatExportDate = (date) => {
+        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    };
 
     const columns = [
         {
@@ -286,6 +270,10 @@ const SharedWishes = () => {
             render: (date) => formatDate(date)
         }
     ];
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     return (
         <ResponsiveContainer>

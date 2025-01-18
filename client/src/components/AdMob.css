@@ -2,6 +2,82 @@
     padding: 24px;
 }
 
+.admob-container .ant-card {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.admob-container .ant-form-item-with-help {
+    margin-bottom: 24px;
+}
+
+/* Ad Unit Code Input Styles */
+.admob-container .ant-input-affix-wrapper {
+    transition: all 0.3s;
+}
+
+.admob-container .ant-input-affix-wrapper-status-success {
+    border-color: #52c41a;
+}
+
+.admob-container .ant-input-affix-wrapper-status-success:hover {
+    border-color: #73d13d;
+}
+
+.admob-container .ant-input-affix-wrapper-status-error {
+    border-color: #ff4d4f;
+}
+
+.admob-container .ant-input-affix-wrapper-status-error:hover {
+    border-color: #ff7875;
+}
+
+/* Status Icons */
+.admob-container .anticon {
+    font-size: 16px;
+    transition: all 0.3s;
+}
+
+.admob-container .anticon-check-circle {
+    color: #52c41a;
+}
+
+.admob-container .anticon-close-circle {
+    color: #ff4d4f;
+}
+
+.admob-container .ant-spin {
+    margin-right: 8px;
+}
+
+/* Loading Spinner */
+.admob-container .ant-spin-dot {
+    font-size: 16px;
+}
+
+/* Tooltip */
+.admob-container .ant-tooltip {
+    max-width: 200px;
+}
+
+.admob-container .ant-tooltip-inner {
+    padding: 6px 8px;
+    min-height: 32px;
+    border-radius: 4px;
+}
+
+/* Form Item Status */
+.admob-container .ant-form-item-has-success .ant-input-affix-wrapper {
+    background-color: #f6ffed;
+}
+
+.admob-container .ant-form-item-has-error .ant-input-affix-wrapper {
+    background-color: #fff2f0;
+}
+
+.admob-container .ant-form-item-has-warning .ant-input-affix-wrapper {
+    background-color: #fffbe6;
+}
+
 .status-tag {
     padding: 2px 8px;
     border-radius: 4px;

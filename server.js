@@ -53,12 +53,11 @@ app.use((err, req, res, next) => {
 
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-//app.use(express.static(path.join(__dirname, 'client/build')));
 
 // Connect to MongoDB
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/eventwishes', {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://ylalit0022:jBRgqv6BBfj2lYaG@cluster0.3d1qt.mongodb.net/eventwishes?retryWrites=true&w=majority', {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
@@ -75,7 +74,7 @@ connectDB();
 // API Routes - All routes are prefixed with /api
 const apiRouter = express.Router();
 
-// API routes
+// Mount routes on the API router
 apiRouter.use('/files', fileRoutes);
 apiRouter.use('/shared-files', sharedFileRoutes);
 apiRouter.use('/admob-ads', adMobRoutes);
@@ -84,8 +83,26 @@ apiRouter.use('/shared-wishes', sharedWishesRoutes);
 apiRouter.use('/shared-wishes/export', sharedWishesExportRoutes);
 apiRouter.use('/templates', templateRoutes);
 
-// Mount API router
+// Mount the API router at /api
 app.use('/api', apiRouter);
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'client/build')));
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+    });
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({
+        success: false,
+        message: 'Internal Server Error',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
 
 // API documentation route
 apiRouter.get('/', (req, res) => {
@@ -102,45 +119,20 @@ apiRouter.get('/', (req, res) => {
     });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error('Global error:', err);
-    res.status(err.status || 500).json({
-        success: false,
-        message: err.message || 'Internal Server Error',
-        error: process.env.NODE_ENV === 'development' ? err : {},
-    });
-});
-
-// Catch-all route for React app
-// app.get('*', (req, res) => {
-//     res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
-// });
-
-// Start server with better error handling
 const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-}).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(`Port ${PORT} is already in use. Please try a different port or kill the process using this port.`);
-        process.exit(1);
-    } else {
-        console.error('Server error:', err.message);
-        process.exit(1);
-    }
 });
 
 // Handle process errors
 process.on('unhandledRejection', (err) => {
     console.error('Unhandled Promise Rejection:', err.message);
     // Close server & exit process
-    server.close(() => process.exit(1));
+    app.close(() => process.exit(1));
 });
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err.message);
     // Close server & exit process
-    server.close(() => process.exit(1));
+    app.close(() => process.exit(1));
 });

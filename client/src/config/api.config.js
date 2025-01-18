@@ -30,14 +30,32 @@ const API_CONFIG = {
             BASE: '/shared-wishes',
             SHARE: '/shared-wishes/share',
             UNSHARE: '/shared-wishes/unshare',
-            ANALYTICS: '/shared-wishes/analytics'
+            ANALYTICS: '/shared-wishes/analytics',
+            EXPORT: '/shared-wishes/export',
+            TRENDING: '/shared-wishes/trending-templates'
+        },
+        TEMPLATES: {
+            BASE: '/templates',
+            CREATE: '/templates/create',
+            IMPORT: '/templates/import',
+            EXPORT: '/templates/export',
+            BULK_DELETE: '/templates/bulk-delete',
+            BULK_STATUS: '/templates/bulk-status'
         },
         ADMOB: {
             BASE: '/admob-ads',
+            CREATE: '/admob-ads',
             LIST: '/admob-ads',
+            UPDATE: (id) => `/admob-ads/${id}`,
+            DELETE: (id) => `/admob-ads/${id}`,
             TOGGLE: (id) => `/admob-ads/${id}/status`,
             TYPES: '/admob-ads/types'
         }
+    },
+    TIMEOUT: 30000,
+    HEADERS: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
     }
 };
 

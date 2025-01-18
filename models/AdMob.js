@@ -2,21 +2,24 @@ const mongoose = require('mongoose');
 
 const adTypes = ['Banner', 'Interstitial', 'Rewarded', 'Native', 'App Open', 'Video'];
 
-// Set strict query mode
-mongoose.set('strictQuery', true);
-
+// Create the schema
 const AdMobSchema = new mongoose.Schema({
     adName: {
         type: String,
         required: [true, 'Ad name is required'],
-        trim: true
-    },
-    adUnitId: {
-        type: String,
-        required: [true, 'Ad unit ID is required'],
-        unique: true,
         trim: true,
-        index: true
+        maxLength: [100, 'Ad name cannot exceed 100 characters']
+    },
+    adUnitCode: {
+        type: String,
+        required: [true, 'Ad unit code is required'],
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return /^ca-app-pub-\d{16}\/\d{10}$/.test(v);
+            },
+            message: props => `${props.value} is not a valid ad unit code format!`
+        }
     },
     adType: {
         type: String,
@@ -32,61 +35,8 @@ const AdMobSchema = new mongoose.Schema({
     }
 }, {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
-
-// Middleware to update the updatedAt field
-AdMobSchema.pre('save', function(next) {
-    this.updatedAt = new Date();
-    next();
-});
-
-// Add indexes for better query performance
-AdMobSchema.index({ adName: 1 });
-AdMobSchema.index({ adType: 1 });
-AdMobSchema.index({ status: 1 });
-
-// Add validation for adUnitId format
-AdMobSchema.path('adUnitId').validate(function(value) {
-    // Basic format validation for AdMob unit ID
-    return /^ca-app-pub-\d{16}\/\d{10}$/.test(value);
-}, 'Invalid AdMob unit ID format. Should be like: ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY');
-
-const AdMob = mongoose.model('AdMob', AdMobSchema);
-
-const admobAdSchema = new mongoose.Schema({
-    adName: { 
-        type: String, 
-        required: [true, 'Ad name is required'], 
-        trim: true 
-    },
-    adUnitId: { 
-        type: String, 
-        required: [true, 'Ad unit ID is required'], 
-        trim: true,
-        unique: true 
-    },
-    adType: { 
-        type: String, 
-        required: [true, 'Ad type is required'],
-        enum: adTypes
-    },
-    status: { 
-        type: Boolean, 
-        default: true 
-    },
-    createdAt: { 
-        type: Date, 
-        default: Date.now 
-    },
-    updatedAt: { 
-        type: Date, 
-        default: Date.now 
-    }
-}, {
-    timestamps: true,
     toJSON: {
+        virtuals: true,
         transform: function(doc, ret) {
             ret.id = ret._id;
             delete ret._id;
@@ -96,12 +46,48 @@ const admobAdSchema = new mongoose.Schema({
     }
 });
 
-// Middleware to update the updatedAt field
-admobAdSchema.pre('save', function(next) {
-    this.updatedAt = Date.now();
-    next();
+// Create unique index for adUnitCode
+AdMobSchema.index(
+    { adUnitCode: 1 },
+    { 
+        unique: true,
+        collation: { locale: 'en', strength: 2 },
+        background: true
+    }
+);
+
+// Pre-save middleware to check for duplicates
+AdMobSchema.pre('save', async function(next) {
+    try {
+        if (this.isModified('adUnitCode')) {
+            const existingAd = await mongoose.models.AdMob.findOne({
+                _id: { $ne: this._id },
+                adUnitCode: this.adUnitCode
+            }).collation({ locale: 'en', strength: 2 });
+
+            if (existingAd) {
+                throw new Error('Ad unit code already exists');
+            }
+        }
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
-const AdmobAd = mongoose.model('AdmobAd', admobAdSchema);
+// Handle duplicate key errors
+AdMobSchema.post('save', function(error, doc, next) {
+    if (error.name === 'MongoServerError' && error.code === 11000) {
+        next(new Error('Ad unit code already exists'));
+    } else {
+        next(error);
+    }
+});
 
-module.exports = { AdMob, AdmobAd, adTypes };
+// Create the model
+const AdMob = mongoose.model('AdMob', AdMobSchema);
+
+module.exports = {
+    AdMob,
+    adTypes
+};

@@ -270,26 +270,23 @@ const Templates = () => {
     const handleSubmit = async (values) => {
         try {
             setLoading(true);
-            const formData = new FormData();
 
-            // Append all form fields
-            formData.append('title', values.title.trim());
-            formData.append('category', values.category.trim());
-            formData.append('htmlContent', values.htmlContent.trim());
-            formData.append('cssContent', values.cssContent?.trim() || '');
-            formData.append('jsContent', values.jsContent?.trim() || '');
-            formData.append('status', values.status !== undefined ? values.status : true);
-
-            // Append preview image if exists
-            if (values.previewImage && values.previewImage[0]?.originFileObj) {
-                formData.append('previewImage', values.previewImage[0].originFileObj);
-            }
+            // Prepare template data
+            const templateData = {
+                title: values.title.trim(),
+                category: values.category.trim(),
+                htmlContent: values.htmlContent.trim(),
+                cssContent: values.cssContent?.trim() || '',
+                jsContent: values.jsContent?.trim() || '',
+                previewUrl: values.previewUrl?.trim() || '',
+                status: values.status !== undefined ? values.status : true
+            };
 
             let response;
             if (editingTemplate) {
-                response = await templatesApi.update(editingTemplate.id, formData);
+                response = await templatesApi.update(editingTemplate.id, templateData);
             } else {
-                response = await templatesApi.create(formData);
+                response = await templatesApi.create(templateData);
             }
 
             if (response?.success) {
@@ -323,24 +320,6 @@ const Templates = () => {
         }
     };
 
-    // Preview image upload props
-    const previewUploadProps = {
-        name: 'previewImage',
-        accept: 'image/*',
-        maxCount: 1,
-        beforeUpload: (file) => {
-            const isImage = file.type.startsWith('image/');
-            if (!isImage) {
-                message.error('You can only upload image files!');
-            }
-            const isLt5M = file.size / 1024 / 1024 < 5;
-            if (!isLt5M) {
-                message.error('Image must be smaller than 5MB!');
-            }
-            return false;
-        }
-    };
-
     const handleEdit = (record) => {
         setEditingTemplate(record);
         form.setFieldsValue({
@@ -349,6 +328,7 @@ const Templates = () => {
             htmlContent: record.htmlContent,
             cssContent: record.cssContent,
             jsContent: record.jsContent,
+            previewUrl: record.previewUrl,
             status: record.status
         });
         setModalVisible(true);
@@ -471,17 +451,16 @@ const Templates = () => {
                     </Form.Item>
 
                     <Form.Item
-                        name="previewImage"
-                        label="Preview Image"
-                        valuePropName="fileList"
-                        getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList}
+                        label="Preview URL"
+                        name="previewUrl"
+                        rules={[
+                            {
+                                type: 'url',
+                                message: 'Please enter a valid URL'
+                            }
+                        ]}
                     >
-                        <Upload {...previewUploadProps} listType="picture-card">
-                            <div>
-                                <PlusOutlined />
-                                <div style={{ marginTop: 8 }}>Upload</div>
-                            </div>
-                        </Upload>
+                        <Input placeholder="Enter preview image URL" />
                     </Form.Item>
 
                     <Form.Item

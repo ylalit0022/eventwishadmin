@@ -5,7 +5,7 @@ const { AdMob, adTypes } = require('../models/AdMob');
 // Validate ad data middleware
 const validateAdData = (req, res, next) => {
     try {
-        const { adName, adUnitId, adType } = req.body;
+        const { adName, adUnitCode, adType } = req.body;
 
         // Skip validation for status-only updates
         if (req.method === 'PATCH' || (Object.keys(req.body).length === 1 && req.body.status !== undefined)) {
@@ -33,14 +33,14 @@ const validateAdData = (req, res, next) => {
             hasErrors = true;
         }
 
-        // Validate adUnitId
-        if (!adUnitId || typeof adUnitId !== 'string' || adUnitId.trim().length === 0) {
-            errors.adUnitId = 'Ad unit ID is required';
+        // Validate adUnitCode
+        if (!adUnitCode || typeof adUnitCode !== 'string' || adUnitCode.trim().length === 0) {
+            errors.adUnitCode = 'Ad unit code is required';
             hasErrors = true;
         } else {
-            const adUnitIdRegex = /^ca-app-pub-\d{16}\/\d{10}$/;
-            if (!adUnitIdRegex.test(adUnitId.trim())) {
-                errors.adUnitId = 'Ad unit ID should be like: ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';
+            const adUnitCodeRegex = /^ca-app-pub-\d{16}\/\d{10}$/;
+            if (!adUnitCodeRegex.test(adUnitCode.trim())) {
+                errors.adUnitCode = 'Ad unit code should be like: ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';
                 hasErrors = true;
             }
         }
@@ -58,25 +58,10 @@ const validateAdData = (req, res, next) => {
         console.error('Validation error:', error);
         res.status(500).json({
             success: false,
-            message: 'Internal server error during validation',
+            message: 'Validation error occurred',
             error: error.message
         });
     }
-};
-
-// Validate status update
-const validateStatusUpdate = (req, res, next) => {
-    const { status } = req.body;
-    if (typeof status !== 'boolean') {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid status value',
-            errors: {
-                status: 'Status must be a boolean value'
-            }
-        });
-    }
-    next();
 };
 
 // GET /api/admob-ads - Get all ads with filters and pagination
@@ -86,43 +71,37 @@ router.get('/', async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const search = req.query.search || '';
         const adType = req.query.adType;
-        const status = req.query.status;
+        const status = req.query.status !== undefined ? req.query.status === 'true' : undefined;
 
         // Build query
         const query = {};
-        
         if (search) {
             query.$or = [
                 { adName: { $regex: search, $options: 'i' } },
-                { adUnitId: { $regex: search, $options: 'i' } }
+                { adUnitCode: { $regex: search, $options: 'i' } }
             ];
         }
+        if (adType) query.adType = adType;
+        if (status !== undefined) query.status = status;
 
-        if (adType) {
-            query.adType = adType;
-        }
-
-        if (status !== undefined) {
-            query.status = status === 'true';
-        }
-
-        // Get total count
-        const total = await AdMob.countDocuments(query);
-
-        // Get ads with pagination
-        const ads = await AdMob.find(query)
-            .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(limit);
+        // Execute query with pagination
+        const [ads, total] = await Promise.all([
+            AdMob.find(query)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit),
+            AdMob.countDocuments(query)
+        ]);
 
         res.json({
             success: true,
             data: {
                 ads,
                 pagination: {
+                    total,
                     page,
-                    limit,
-                    total
+                    pageSize: limit,
+                    totalPages: Math.ceil(total / limit)
                 }
             }
         });
@@ -136,46 +115,55 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST /api/admob-ads/create - Create a new ad
-router.post('/create', validateAdData, async (req, res) => {
+// POST /api/admob-ads - Create new ad
+router.post('/', validateAdData, async (req, res) => {
     try {
-        const { adName, adType, adUnitId, status = true } = req.body;
-
-        // Trim input values
-        const trimmedAdName = adName.trim();
-        const trimmedAdUnitId = adUnitId.trim();
-
-        // Check if ad unit ID already exists
-        const existingAd = await AdMob.findOne({ adUnitId: trimmedAdUnitId });
-        if (existingAd) {
-            return res.status(400).json({
-                success: false,
-                message: 'Ad unit ID already exists',
-                errors: {
-                    adUnitId: 'This ad unit ID is already in use'
-                }
-            });
-        }
+        const { adName, adType, adUnitCode, status } = req.body;
 
         // Create new ad
         const newAd = new AdMob({
-            adName: trimmedAdName,
+            adName: adName.trim(),
             adType,
-            adUnitId: trimmedAdUnitId,
+            adUnitCode: adUnitCode.trim(),
             status: status !== undefined ? status : true
         });
 
         // Save to database
-        await newAd.save();
-        
+        const savedAd = await newAd.save();
+
         res.status(201).json({
             success: true,
             message: 'Ad created successfully',
-            data: newAd
+            data: savedAd
         });
     } catch (error) {
         console.error('Error creating ad:', error);
-        res.status(400).json({
+
+        // Handle duplicate key error
+        if (error.message === 'Ad unit code already exists') {
+            return res.status(400).json({
+                success: false,
+                message: 'Ad unit code already exists',
+                errors: {
+                    adUnitCode: 'This Ad unit code is already in use'
+                }
+            });
+        }
+
+        // Handle validation errors
+        if (error.name === 'ValidationError') {
+            const errors = {};
+            for (let field in error.errors) {
+                errors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+
+        res.status(500).json({
             success: false,
             message: 'Failed to create ad',
             error: error.message
@@ -183,56 +171,18 @@ router.post('/create', validateAdData, async (req, res) => {
     }
 });
 
-// PUT /api/admob-ads/:id - Update an ad
+// PUT /api/admob-ads/:id - Update ad
 router.put('/:id', validateAdData, async (req, res) => {
     try {
-        // Check if this is a status-only update
-        if (Object.keys(req.body).length === 1 && req.body.status !== undefined) {
-            const updatedAd = await AdMob.findByIdAndUpdate(
-                req.params.id,
-                { $set: { status: req.body.status } },
-                { new: true }
-            );
-
-            if (!updatedAd) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Ad not found'
-                });
-            }
-
-            return res.json({
-                success: true,
-                data: updatedAd,
-                message: 'Status updated successfully'
-            });
-        }
-
-        // Check if ad unit ID already exists for a different ad
-        const existingAd = await AdMob.findOne({
-            adUnitId: req.body.adUnitId,
-            _id: { $ne: req.params.id }
-        });
-        
-        if (existingAd) {
-            return res.status(400).json({
-                success: false,
-                message: 'Ad unit ID already exists',
-                errors: {
-                    adUnitId: 'This ad unit ID is already in use'
-                }
-            });
-        }
+        const { adName, adType, adUnitCode, status } = req.body;
 
         const updatedAd = await AdMob.findByIdAndUpdate(
             req.params.id,
             {
-                $set: {
-                    adName: req.body.adName.trim(),
-                    adType: req.body.adType,
-                    adUnitId: req.body.adUnitId.trim(),
-                    status: req.body.status !== undefined ? req.body.status : true
-                }
+                adName: adName.trim(),
+                adType,
+                adUnitCode: adUnitCode.trim(),
+                status: status !== undefined ? status : true
             },
             { new: true, runValidators: true }
         );
@@ -246,12 +196,37 @@ router.put('/:id', validateAdData, async (req, res) => {
 
         res.json({
             success: true,
-            data: updatedAd,
-            message: 'Ad updated successfully'
+            message: 'Ad updated successfully',
+            data: updatedAd
         });
     } catch (error) {
         console.error('Error updating ad:', error);
-        res.status(400).json({
+
+        // Handle duplicate key error
+        if (error.message === 'Ad unit code already exists') {
+            return res.status(400).json({
+                success: false,
+                message: 'Ad unit code already exists',
+                errors: {
+                    adUnitCode: 'This Ad unit code is already in use'
+                }
+            });
+        }
+
+        // Handle validation errors
+        if (error.name === 'ValidationError') {
+            const errors = {};
+            for (let field in error.errors) {
+                errors[field] = error.errors[field].message;
+            }
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+
+        res.status(500).json({
             success: false,
             message: 'Failed to update ad',
             error: error.message
@@ -259,37 +234,7 @@ router.put('/:id', validateAdData, async (req, res) => {
     }
 });
 
-// PATCH /api/admob-ads/:id/status - Toggle ad status
-router.patch('/:id/status', validateStatusUpdate, async (req, res) => {
-    try {
-        const ad = await AdMob.findById(req.params.id);
-        
-        if (!ad) {
-            return res.status(404).json({
-                success: false,
-                message: 'Ad not found'
-            });
-        }
-
-        ad.status = req.body.status;
-        await ad.save();
-
-        res.json({
-            success: true,
-            data: ad,
-            message: 'Ad status updated successfully'
-        });
-    } catch (error) {
-        console.error('Error updating ad status:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update ad status',
-            error: error.message
-        });
-    }
-});
-
-// DELETE /api/admob-ads/:id - Delete an ad
+// DELETE /api/admob-ads/:id - Delete ad
 router.delete('/:id', async (req, res) => {
     try {
         const deletedAd = await AdMob.findByIdAndDelete(req.params.id);
@@ -310,6 +255,58 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete ad',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/admob-ads/types - Get all ad types
+router.get('/types', (req, res) => {
+    res.json({
+        success: true,
+        data: adTypes
+    });
+});
+
+// PATCH /api/admob-ads/:id/status - Toggle ad status
+router.patch('/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        
+        // Validate status
+        if (typeof status !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status value',
+                errors: {
+                    status: 'Status must be a boolean value'
+                }
+            });
+        }
+
+        const updatedAd = await AdMob.findByIdAndUpdate(
+            req.params.id,
+            { status },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedAd) {
+            return res.status(404).json({
+                success: false,
+                message: 'Ad not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Ad status updated successfully',
+            data: updatedAd
+        });
+    } catch (error) {
+        console.error('Error updating ad status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update ad status',
             error: error.message
         });
     }
