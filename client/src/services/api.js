@@ -28,9 +28,26 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
     response => {
-        // For blob responses (file downloads), return as is
+        // For blob responses (file downloads), return the raw response
         if (response.config.responseType === 'blob') {
-            return response;
+            // Check if the response is an error response
+            if (response.data instanceof Blob && response.data.type === 'application/json') {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const errorData = JSON.parse(reader.result);
+                        reject(errorData);
+                    };
+                    reader.onerror = () => {
+                        reject({
+                            success: false,
+                            message: 'Error reading error response'
+                        });
+                    };
+                    reader.readAsText(response.data);
+                });
+            }
+            return response.data;
         }
         // For regular responses, return data
         return response.data;
@@ -49,15 +66,14 @@ api.interceptors.response.use(
             // The request was made but no response was received
             return Promise.reject({
                 ...error,
-                message: 'No response from server'
-            });
-        } else {
-            // Something happened in setting up the request that triggered an Error
-            return Promise.reject({
-                ...error,
-                message: error.message || 'Request failed'
+                message: 'No response received from server'
             });
         }
+        // Something happened in setting up the request that triggered an Error
+        return Promise.reject({
+            ...error,
+            message: error.message || 'An error occurred'
+        });
     }
 );
 
@@ -75,7 +91,23 @@ export const adMobApi = {
 
     async create(data) {
         try {
-            const response = await api.post('/admob-ads', data);
+            // Validate required fields
+            if (!data.adName?.trim()) {
+                throw new Error('Ad name is required');
+            }
+            if (!data.adType) {
+                throw new Error('Ad type is required');
+            }
+            if (!data.adUnitId?.trim()) {
+                throw new Error('Ad unit ID is required');
+            }
+
+            const response = await api.post('/admob-ads/create', {
+                adName: data.adName.trim(),
+                adType: data.adType,
+                adUnitId: data.adUnitId.trim(),
+                status: data.status !== undefined ? data.status : true
+            });
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -85,7 +117,30 @@ export const adMobApi = {
 
     async update(id, data) {
         try {
-            const response = await api.put(`/admob-ads/${id}`, data);
+            // If only status is being updated
+            if (Object.keys(data).length === 1 && data.status !== undefined) {
+                const response = await api.patch(`/admob-ads/${id}/status`, { status: data.status });
+                return response;
+            }
+
+            // Validate required fields for full update
+            if (!data.adName?.trim()) {
+                throw new Error('Ad name is required');
+            }
+            if (!data.adType) {
+                throw new Error('Ad type is required');
+            }
+            if (!data.adUnitId?.trim()) {
+                throw new Error('Ad unit ID is required');
+            }
+
+            // Full update
+            const response = await api.put(`/admob-ads/${id}`, {
+                adName: data.adName.trim(),
+                adType: data.adType,
+                adUnitId: data.adUnitId.trim(),
+                status: data.status !== undefined ? data.status : true
+            });
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -96,16 +151,6 @@ export const adMobApi = {
     async delete(id) {
         try {
             const response = await api.delete(`/admob-ads/${id}`);
-            return response;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw error;
-        }
-    },
-
-    async toggleStatus(id) {
-        try {
-            const response = await api.patch(`/admob-ads/${id}/status`);
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -140,14 +185,48 @@ export const filesApi = {
 
 // Shared Files API
 export const sharedFilesApi = {
-    getAll() {
-        return api.get('/shared-files');
+    getAll(params) {
+        return api.get('/shared-files', { params });
     },
-    share(fileId, data) {
-        return api.post(`/shared-files/share/${fileId}`, data);
+    
+    upload(formData, onProgress) {
+        return api.post('/shared-files/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            },
+            onUploadProgress: onProgress
+        });
     },
-    unshare(fileId) {
-        return api.delete(`/shared-files/unshare/${fileId}`);
+    
+    download(id) {
+        if (!id) {
+            return Promise.reject({
+                success: false,
+                message: 'File ID is required'
+            });
+        }
+        return api.get(`/shared-files/download/${id}`, {
+            responseType: 'blob'
+        });
+    },
+    
+    delete(id) {
+        if (!id) {
+            return Promise.reject({
+                success: false,
+                message: 'File ID is required'
+            });
+        }
+        return api.delete(`/shared-files/${id}`);
+    },
+
+    export(filter) {
+        return api.get(`/shared-files/export?filter=${filter}`, {
+            responseType: 'blob',
+            headers: {
+                'Accept': 'text/csv'
+            }
+        }).then(response => response.data);
     }
 };
 
@@ -158,42 +237,28 @@ export const sharedWishesApi = {
             const response = await api.get('/shared-wishes', { params });
             return response;
         } catch (error) {
-            console.error('API Error:', error);
+            console.error('Error fetching shared wishes:', error);
             throw error;
         }
     },
-    async getAnalytics() {
-        try {
-            const response = await api.get('/shared-wishes/analytics');
-            return response;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw error;
-        }
+
+    getAnalytics() {
+        return api.get('/shared-wishes/analytics');
     },
-    async export(filter) {
-        try {
-            const response = await api.get('/shared-wishes/export', {
-                params: { filter },
-                responseType: 'blob'
-            });
-            return response;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw error;
-        }
+
+    export(filter) {
+        return api.get(`/shared-wishes/export?filter=${filter}`, {
+            responseType: 'blob'
+        });
     },
-    async exportEnhanced(filter) {
-        try {
-            const response = await api.get('/shared-wishes/export/enhanced', {
-                params: { filter },
-                responseType: 'blob'
-            });
-            return response;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw error;
-        }
+
+    exportEnhanced(filter) {
+        return api.get(`/shared-wishes/export/enhanced?filter=${filter}`, {
+            responseType: 'blob',
+            headers: {
+                'Accept': 'text/csv'
+            }
+        });
     }
 };
 
@@ -237,9 +302,13 @@ export const templatesApi = {
         }
     },
 
-    async create(data) {
+    async create(formData) {
         try {
-            const response = await api.post('/templates', data);
+            const response = await api.post('/templates/create', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -247,9 +316,13 @@ export const templatesApi = {
         }
     },
 
-    async update(id, data) {
+    async update(id, formData) {
         try {
-            const response = await api.put(`/templates/${id}`, data);
+            const response = await api.put(`/templates/${id}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -277,9 +350,19 @@ export const templatesApi = {
         }
     },
 
-    async preview(data) {
+    async bulkDelete(ids) {
         try {
-            const response = await api.post('/templates/preview', data);
+            const response = await api.post('/templates/bulk-delete', { ids });
+            return response;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    async bulkUpdateStatus(ids, status) {
+        try {
+            const response = await api.post('/templates/bulk-status', { ids, status });
             return response;
         } catch (error) {
             console.error('API Error:', error);
@@ -308,17 +391,17 @@ export const templatesApi = {
                 responseType: 'blob'
             });
             
-            // Create and trigger download
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `templates-${new Date().toISOString()}.csv`);
+            link.setAttribute('download', 'templates.csv');
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
-            
-            return response;
+
+            return { success: true };
         } catch (error) {
             console.error('API Error:', error);
             throw error;

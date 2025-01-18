@@ -1,0 +1,36 @@
+.admob-container {
+    padding: 24px;
+}
+
+.status-tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    text-transform: capitalize;
+}
+
+.status-tag.active {
+    background: #e6f7ff;
+    color: #1890ff;
+}
+
+.status-tag.inactive {
+    background: #fff1f0;
+    color: #ff4d4f;
+}
+
+@media screen and (max-width: 768px) {
+    .admob-container {
+        padding: 12px;
+    }
+
+    .ant-card-head-title {
+        font-size: 16px !important;
+    }
+
+    .ant-card-extra .ant-btn {
+        padding: 4px 8px;
+        height: 32px;
+        font-size: 14px;
+    }
+}

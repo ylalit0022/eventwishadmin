@@ -15,6 +15,7 @@ const app = express();
 // Import routes
 
 const fileRoutes = require('./routes/fileRoutes');
+const sharedFileRoutes = require('./routes/sharedFileRoutes');
 const adMobRoutes = require('./routes/adMobRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const sharedWishesRoutes = require('./routes/sharedWishesRoutes');
@@ -76,6 +77,7 @@ const apiRouter = express.Router();
 
 // API routes
 apiRouter.use('/files', fileRoutes);
+apiRouter.use('/shared-files', sharedFileRoutes);
 apiRouter.use('/admob-ads', adMobRoutes);
 apiRouter.use('/dashboard', dashboardRoutes);
 apiRouter.use('/shared-wishes', sharedWishesRoutes);

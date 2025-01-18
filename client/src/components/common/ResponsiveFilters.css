@@ -1,0 +1,46 @@
+.responsive-filters {
+  margin-bottom: 24px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.search-row {
+  margin-bottom: 16px;
+}
+
+/* Mobile styles */
+@media screen and (max-width: 768px) {
+  .responsive-filters {
+    margin-bottom: 16px;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .filter-row > * {
+    width: 100% !important;
+  }
+
+  .ant-picker {
+    width: 100% !important;
+  }
+
+  .ant-input-search {
+    width: 100% !important;
+  }
+
+  .ant-select {
+    width: 100% !important;
+  }
+}

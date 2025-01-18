@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Table,
     Card,
     Button,
     Space,
@@ -9,20 +8,33 @@ import {
     Input,
     Select,
     Switch,
-    message
+    message,
+    App
 } from 'antd';
 import {
     PlusOutlined,
     EditOutlined,
-    DeleteOutlined,
-    SearchOutlined
+    DeleteOutlined
 } from '@ant-design/icons';
 import { adMobApi } from '../services/api';
-import debounce from 'lodash.debounce';
+import ResponsiveTable from './common/ResponsiveTable';
+import ResponsiveFilters from './common/ResponsiveFilters';
+import { useResponsive } from '../hooks/useResponsive';
+import './AdMob.css';
 
 const { Option } = Select;
 
+const AD_TYPES = [
+    { value: 'Banner', label: 'Banner' },
+    { value: 'Interstitial', label: 'Interstitial' },
+    { value: 'Rewarded', label: 'Rewarded' },
+    { value: 'Native', label: 'Native' },
+    { value: 'App Open', label: 'App Open' },
+    { value: 'Video', label: 'Video' }
+];
+
 const AdMob = () => {
+    const { isMobile } = useResponsive();
     const [data, setData] = useState({
         ads: [],
         pagination: {
@@ -38,6 +50,11 @@ const AdMob = () => {
     const [searchText, setSearchText] = useState('');
     const [selectedType, setSelectedType] = useState(undefined);
     const [selectedStatus, setSelectedStatus] = useState(undefined);
+    const [messageApi, contextHolder] = message.useMessage();
+
+    useEffect(() => {
+        fetchData();
+    }, [searchText, selectedType, selectedStatus]);
 
     // Fetch data with filters
     const fetchData = async (page = 1) => {
@@ -51,7 +68,7 @@ const AdMob = () => {
                 status: selectedStatus
             });
 
-            if (response?.success && response?.data) {
+            if (response?.data?.ads) {
                 setData({
                     ads: response.data.ads,
                     pagination: {
@@ -63,162 +80,177 @@ const AdMob = () => {
             }
         } catch (error) {
             console.error('Error fetching ads:', error);
-            message.error('Failed to fetch ads');
+            messageApi.error('Failed to fetch ads');
         } finally {
             setLoading(false);
         }
     };
 
-    // Initialize data
-    useEffect(() => {
-        fetchData();
-    }, [searchText, selectedType, selectedStatus]);
-
     // Handle form submission
     const handleSubmit = async (values) => {
         try {
+            setLoading(true);
+            const formData = {
+                adName: values.adName,
+                adType: values.adType,
+                adUnitId: values.adUnitId,
+                status: values.status !== undefined ? values.status : true
+            };
+
+            let response;
             if (editingAd) {
-                await adMobApi.update(editingAd.id, values);
-                message.success('Ad updated successfully');
+                response = await adMobApi.update(editingAd._id, formData);
             } else {
-                await adMobApi.create(values);
-                message.success('Ad created successfully');
+                response = await adMobApi.create(formData);
             }
-            setModalVisible(false);
-            form.resetFields();
-            setEditingAd(null);
-            fetchData();
+
+            if (response?.success) {
+                messageApi.success(editingAd ? 'Ad updated successfully' : 'Ad created successfully');
+                setModalVisible(false);
+                form.resetFields();
+                setEditingAd(null);
+                fetchData();
+            } else {
+                throw new Error(response?.message || 'Operation failed');
+            }
         } catch (error) {
             console.error('Error saving ad:', error);
-            if (error.response?.data?.details) {
-                const details = error.response.data.details;
-                const errorMessages = Object.entries(details)
-                    .filter(([_, msg]) => msg)
-                    .map(([field, msg]) => `${field}: ${msg}`)
-                    .join('\n');
-                message.error(errorMessages || 'Failed to save ad');
+            const errorMessage = error.message || 'Failed to save ad';
+            const fieldErrors = error.errors;
+            
+            if (fieldErrors) {
+                // Set field-specific errors
+                Object.entries(fieldErrors).forEach(([field, error]) => {
+                    if (error) {
+                        form.setFields([{
+                            name: field,
+                            errors: [error]
+                        }]);
+                    }
+                });
             } else {
-                message.error('Failed to save ad');
+                // Show general error message
+                messageApi.error(errorMessage);
             }
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Handle ad deletion
-    const handleDelete = async (id) => {
+    const handleEdit = (record) => {
+        setEditingAd(record);
+        form.setFieldsValue({
+            adName: record.adName,
+            adType: record.adType,
+            adUnitId: record.adUnitId,
+            status: record.status
+        });
+        setModalVisible(true);
+    };
+
+    const handleDelete = async (record) => {
         try {
-            await adMobApi.delete(id);
-            message.success('Ad deleted successfully');
-            fetchData();
+            setLoading(true);
+            const response = await adMobApi.delete(record._id);
+            if (response?.success) {
+                messageApi.success('Ad deleted successfully');
+                fetchData();
+            } else {
+                throw new Error(response?.message || 'Failed to delete ad');
+            }
         } catch (error) {
             console.error('Error deleting ad:', error);
-            message.error('Failed to delete ad');
+            messageApi.error(error.message || 'Failed to delete ad');
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Handle status toggle
     const handleStatusToggle = async (id, checked) => {
         try {
-            await adMobApi.toggleStatus(id);
-            message.success('Status updated successfully');
-            fetchData();
+            setLoading(true);
+            const response = await adMobApi.update(id, { status: checked });
+            if (response?.success) {
+                messageApi.success('Status updated successfully');
+                fetchData();
+            } else {
+                throw new Error(response?.message || 'Failed to update status');
+            }
         } catch (error) {
             console.error('Error updating status:', error);
-            message.error('Failed to update status');
+            messageApi.error(error.message || 'Failed to update status');
+            // Revert the switch state on error
+            fetchData();
+        } finally {
+            setLoading(false);
         }
+    };
+
+    const handleTableChange = (pagination) => {
+        fetchData(pagination.current);
     };
 
     // Table columns
     const columns = [
         {
-            title: 'Ad Name',
+            title: 'Name',
             dataIndex: 'adName',
             key: 'adName',
-            sorter: (a, b) => a.adName.localeCompare(b.adName)
+            ellipsis: true,
         },
         {
-            title: 'Ad Unit ID',
-            dataIndex: 'adUnitId',
-            key: 'adUnitId'
-        },
-        {
-            title: 'Ad Type',
+            title: 'Type',
             dataIndex: 'adType',
             key: 'adType',
-            filters: [
-                { text: 'Banner', value: 'Banner' },
-                { text: 'Interstitial', value: 'Interstitial' },
-                { text: 'Rewarded', value: 'Rewarded' }
-            ],
-            onFilter: (value, record) => record.adType === value
+            width: isMobile ? 100 : 120,
+        },
+        {
+            title: 'Unit ID',
+            dataIndex: 'adUnitId',
+            key: 'adUnitId',
+            ellipsis: true,
         },
         {
             title: 'Status',
+            dataIndex: 'status',
             key: 'status',
-            render: (_, record) => (
+            width: 100,
+            render: (status, record) => (
                 <Switch
-                    checked={record.status}
-                    onChange={(checked) => handleStatusToggle(record.id, checked)}
+                    checked={status}
+                    onChange={(checked) => handleStatusToggle(record._id, checked)}
                 />
-            )
+            ),
         },
         {
             title: 'Actions',
             key: 'actions',
+            width: 120,
             render: (_, record) => (
                 <Space>
                     <Button
-                        type="link"
+                        type="text"
                         icon={<EditOutlined />}
-                        onClick={() => {
-                            setEditingAd(record);
-                            form.setFieldsValue(record);
-                            setModalVisible(true);
-                        }}
+                        onClick={() => handleEdit(record)}
                     />
                     <Button
-                        type="link"
+                        type="text"
                         danger
                         icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(record.id)}
+                        onClick={() => handleDelete(record)}
                     />
                 </Space>
-            )
-        }
+            ),
+        },
     ];
 
     return (
-        <div style={{ padding: '24px' }}>
-            <Card
-                title="AdMob Ads"
-                extra={
-                    <Space>
-                        <Input
-                            placeholder="Search ads..."
-                            prefix={<SearchOutlined />}
-                            onChange={debounce(
-                                (e) => setSearchText(e.target.value),
-                                300
-                            )}
-                        />
-                        <Select
-                            placeholder="Filter by type"
-                            allowClear
-                            onChange={setSelectedType}
-                            style={{ width: 150 }}
-                        >
-                            <Option value="Banner">Banner</Option>
-                            <Option value="Interstitial">Interstitial</Option>
-                            <Option value="Rewarded">Rewarded</Option>
-                        </Select>
-                        <Select
-                            placeholder="Filter by status"
-                            allowClear
-                            onChange={setSelectedStatus}
-                            style={{ width: 150 }}
-                        >
-                            <Option value="true">Active</Option>
-                            <Option value="false">Inactive</Option>
-                        </Select>
+        <App>
+            {contextHolder}
+            <div className="admob-container">
+                <Card
+                    title="AdMob Management"
+                    extra={
                         <Button
                             type="primary"
                             icon={<PlusOutlined />}
@@ -228,77 +260,98 @@ const AdMob = () => {
                                 setModalVisible(true);
                             }}
                         >
-                            Add Ad
+                            Add New
                         </Button>
-                    </Space>
-                }
-            >
-                <Table
-                    columns={columns}
-                    dataSource={data.ads}
-                    rowKey="id"
-                    loading={loading}
-                    pagination={data.pagination}
-                    onChange={(pagination) => fetchData(pagination.current)}
-                />
-            </Card>
-
-            {/* Ad Form Modal */}
-            <Modal
-                title={editingAd ? 'Edit Ad' : 'Add Ad'}
-                visible={modalVisible}
-                onOk={form.submit}
-                onCancel={() => {
-                    setModalVisible(false);
-                    form.resetFields();
-                    setEditingAd(null);
-                }}
-                width={600}
-            >
-                <Form
-                    form={form}
-                    layout="vertical"
-                    onFinish={handleSubmit}
+                    }
                 >
-                    <Form.Item
-                        name="adName"
-                        label="Ad Name"
-                        rules={[{ required: true, message: 'Please enter ad name' }]}
-                    >
-                        <Input />
-                    </Form.Item>
+                    <ResponsiveFilters
+                        onSearch={setSearchText}
+                        onStatusChange={setSelectedStatus}
+                        onTypeChange={setSelectedType}
+                        showTypeFilter
+                        types={AD_TYPES}
+                    />
 
-                    <Form.Item
-                        name="adUnitId"
-                        label="Ad Unit ID"
-                        rules={[{ required: true, message: 'Please enter ad unit ID' }]}
-                    >
-                        <Input />
-                    </Form.Item>
+                    <ResponsiveTable
+                        columns={columns}
+                        dataSource={data.ads}
+                        loading={loading}
+                        pagination={data.pagination}
+                        onChange={handleTableChange}
+                        rowKey="_id"
+                    />
+                </Card>
 
-                    <Form.Item
-                        name="adType"
-                        label="Ad Type"
-                        rules={[{ required: true, message: 'Please select ad type' }]}
+                <Modal
+                    title={editingAd ? 'Edit Ad' : 'Create New Ad'}
+                    open={modalVisible}
+                    onOk={form.submit}
+                    onCancel={() => {
+                        setModalVisible(false);
+                        form.resetFields();
+                        setEditingAd(null);
+                    }}
+                    confirmLoading={loading}
+                    destroyOnClose
+                >
+                    <Form
+                        form={form}
+                        layout="vertical"
+                        onFinish={handleSubmit}
+                        initialValues={{
+                            status: true
+                        }}
                     >
-                        <Select>
-                            <Option value="Banner">Banner</Option>
-                            <Option value="Interstitial">Interstitial</Option>
-                            <Option value="Rewarded">Rewarded</Option>
-                        </Select>
-                    </Form.Item>
+                        <Form.Item
+                            name="adName"
+                            label="Name"
+                            rules={[
+                                { required: true, message: 'Please enter ad name' },
+                                { max: 100, message: 'Ad name cannot exceed 100 characters' }
+                            ]}
+                        >
+                            <Input placeholder="Enter ad name" />
+                        </Form.Item>
 
-                    <Form.Item
-                        name="status"
-                        label="Status"
-                        valuePropName="checked"
-                        initialValue={true}
-                    >
-                        <Switch />
-                    </Form.Item>
-                </Form>
-            </Modal>
-        </div>
+                        <Form.Item
+                            name="adType"
+                            label="Type"
+                            rules={[{ required: true, message: 'Please select ad type' }]}
+                        >
+                            <Select placeholder="Select ad type">
+                                {AD_TYPES.map(type => (
+                                    <Option key={type.value} value={type.value}>
+                                        {type.label}
+                                    </Option>
+                                ))}
+                            </Select>
+                        </Form.Item>
+
+                        <Form.Item
+                            name="adUnitId"
+                            label="Unit ID"
+                            rules={[
+                                { required: true, message: 'Please enter ad unit ID' },
+                                {
+                                    pattern: /^ca-app-pub-\d{16}\/\d{10}$/,
+                                    message: 'Invalid AdMob unit ID format. Should be like: ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY'
+                                }
+                            ]}
+                        >
+                            <Input placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY" />
+                        </Form.Item>
+
+                        <Form.Item
+                            name="status"
+                            label="Status"
+                            valuePropName="checked"
+                        >
+                            <Switch />
+                        </Form.Item>
+                    </Form>
+                </Modal>
+            </div>
+        </App>
     );
 };
 

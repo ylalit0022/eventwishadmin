@@ -21,6 +21,8 @@ const API_CONFIG = {
         },
         SHARED_FILES: {
             BASE: '/shared-files',
+            UPLOAD: '/shared-files/upload',
+            DOWNLOAD: '/shared-files/download',
             SHARE: '/shared-files/share',
             UNSHARE: '/shared-files/unshare'
         },

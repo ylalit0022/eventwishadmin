@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const adTypes = ['Banner', 'Interstitial', 'Rewarded'];
+const adTypes = ['Banner', 'Interstitial', 'Rewarded', 'Native', 'App Open', 'Video'];
 
 // Set strict query mode
 mongoose.set('strictQuery', true);
@@ -23,7 +23,7 @@ const AdMobSchema = new mongoose.Schema({
         required: [true, 'Ad type is required'],
         enum: {
             values: adTypes,
-            message: 'Invalid ad type'
+            message: 'Invalid ad type. Must be one of: ' + adTypes.join(', ')
         }
     },
     status: {
@@ -42,6 +42,17 @@ AdMobSchema.pre('save', function(next) {
     next();
 });
 
+// Add indexes for better query performance
+AdMobSchema.index({ adName: 1 });
+AdMobSchema.index({ adType: 1 });
+AdMobSchema.index({ status: 1 });
+
+// Add validation for adUnitId format
+AdMobSchema.path('adUnitId').validate(function(value) {
+    // Basic format validation for AdMob unit ID
+    return /^ca-app-pub-\d{16}\/\d{10}$/.test(value);
+}, 'Invalid AdMob unit ID format. Should be like: ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY');
+
 const AdMob = mongoose.model('AdMob', AdMobSchema);
 
 const admobAdSchema = new mongoose.Schema({
@@ -59,7 +70,7 @@ const admobAdSchema = new mongoose.Schema({
     adType: { 
         type: String, 
         required: [true, 'Ad type is required'],
-        enum: ['Banner', 'Interstitial', 'Rewarded']
+        enum: adTypes
     },
     status: { 
         type: Boolean, 

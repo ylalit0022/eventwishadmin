@@ -1,0 +1,52 @@
+.app-sidebar {
+    position: fixed;
+    left: 0;
+    height: 100vh;
+    z-index: 999;
+}
+
+.app-sidebar .ant-layout-sider-children {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.logo {
+    height: 64px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.logo h1 {
+    color: white;
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ant-layout-sider-collapsed .logo h1 {
+    display: none;
+}
+
+/* Mobile styles */
+@media screen and (max-width: 768px) {
+    .app-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s;
+    }
+
+    .app-sidebar:not(.ant-layout-sider-collapsed) {
+        transform: translateX(0);
+    }
+    
+    .ant-layout-sider-children {
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+}

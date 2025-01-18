@@ -1,74 +1,129 @@
-import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
-import { Layout as AntLayout, Button, theme } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { Layout as AntLayout, Menu, Button } from 'antd';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+    MenuOutlined,
+    DashboardOutlined,
+    FileOutlined,
+    ShareAltOutlined,
+    AppstoreOutlined,
+    SettingOutlined,
+    GiftOutlined
+} from '@ant-design/icons';
 import Sidebar from './Sidebar';
+import { useResponsive } from '../hooks/useResponsive';
+import './Layout.css';
 
-const { Content } = AntLayout;
-const { useToken } = theme;
+const { Header, Content } = AntLayout;
 
-const Layout = () => {
-    const { token } = useToken();
+const Layout = ({ children }) => {
+    const { isMobile } = useResponsive();
     const [collapsed, setCollapsed] = useState(false);
-    const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const navigate = useNavigate();
+    const location = useLocation();
 
-    useEffect(() => {
-        const handleResize = () => {
-            const mobile = window.innerWidth <= 768;
-            setIsMobile(mobile);
-            if (mobile) setCollapsed(true);
-        };
+    const menuItems = [
+        {
+            key: '/',
+            icon: <DashboardOutlined />,
+            label: 'Dashboard'
+        },
+        {
+            key: '/templates',
+            icon: <FileOutlined />,
+            label: 'Templates'
+        },
+        {
+            key: '/shared-files',
+            icon: <ShareAltOutlined />,
+            label: 'Shared Files'
+        },
+        {
+            key: '/admob-ads',
+            icon: <AppstoreOutlined />,
+            label: 'AdMob'
+        },
+        {
+            key: '/shared-wishes',
+            icon: <GiftOutlined />,
+            label: 'Shared Wishes'
+        },
+        {
+            key: '/settings',
+            icon: <SettingOutlined />,
+            label: 'Settings'
+        }
+    ];
 
-        handleResize();
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    const toggleSidebar = () => {
-        setCollapsed(!collapsed);
+    const handleMenuClick = (e) => {
+        navigate(e.key);
+        if (isMobile) {
+            setCollapsed(true);
+        }
     };
 
     return (
-        <AntLayout style={{ minHeight: '100vh' }}>
-            <Sidebar collapsed={collapsed} isMobile={isMobile} />
-            <AntLayout 
-                style={{
-                    marginLeft: isMobile ? 0 : (collapsed ? 80 : 220),
-                    transition: 'all 0.2s'
-                }}
-            >
-                <div style={{
-                    padding: '0 24px',
-                    background: token.colorBgContainer,
-                    display: 'flex',
-                    alignItems: 'center',
-                    height: 64,
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 2,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                }}>
-                    <Button
-                        type="text"
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={toggleSidebar}
-                        style={{
-                            fontSize: '16px',
-                            width: 64,
-                            height: 64,
-                        }}
-                    />
-                </div>
-                <Content style={{ 
-                    margin: '24px 16px', 
-                    padding: 24, 
-                    background: token.colorBgContainer,
-                    borderRadius: token.borderRadius,
-                    minHeight: 280 
-                }}>
-                    <Outlet />
+        <AntLayout className="app-layout">
+            {/* Show sidebar only on mobile */}
+            {isMobile && (
+                <Sidebar 
+                    collapsed={collapsed}
+                    onCollapse={setCollapsed}
+                    menuItems={menuItems}
+                    selectedKey={location.pathname}
+                    onMenuClick={handleMenuClick}
+                />
+            )}
+            
+            <AntLayout className={isMobile ? 'site-layout-mobile' : 'site-layout-desktop'}>
+                <Header className="site-header">
+                    <div className="header-content">
+                        {isMobile ? (
+                            <Button
+                                type="text"
+                                icon={<MenuOutlined />}
+                                onClick={() => setCollapsed(!collapsed)}
+                                className="menu-trigger"
+                            />
+                        ) : null}
+                        
+                        <div 
+                            className="logo" 
+                            onClick={() => navigate('/')}
+                            style={{ cursor: 'pointer' }}
+                        >
+                            EventWishes Admin
+                        </div>
+
+                        {/* Show menu in header only on desktop */}
+                        {!isMobile && (
+                            <div className="header-nav">
+                                <Menu
+                                    theme="dark"
+                                    mode="horizontal"
+                                    selectedKeys={[location.pathname]}
+                                    items={menuItems}
+                                    onClick={handleMenuClick}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </Header>
+                
+                <Content className="site-content">
+                    <div className="content-container">
+                        {children}
+                    </div>
                 </Content>
             </AntLayout>
+
+            {/* Mobile overlay */}
+            {isMobile && !collapsed && (
+                <div 
+                    className="sidebar-overlay" 
+                    onClick={() => setCollapsed(true)}
+                />
+            )}
         </AntLayout>
     );
 };

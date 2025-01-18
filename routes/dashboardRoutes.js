@@ -16,7 +16,7 @@ router.get('/summary', async (req, res) => {
         ]);
 
         // Get recent activity
-        const recentActivity = await Promise.all([
+        const [recentWishes, recentFiles] = await Promise.all([
             // Recent shared wishes
             SharedWish.find()
                 .sort({ createdAt: -1 })
@@ -26,22 +26,22 @@ router.get('/summary', async (req, res) => {
             SharedFile.find()
                 .sort({ createdAt: -1 })
                 .limit(5)
-                .select('fileName sharedWith createdAt')
+                .select('fileName originalName owner createdAt')
         ]);
 
         // Format recent activity
         const formattedActivity = [
-            ...recentActivity[0].map(wish => ({
+            ...recentWishes.map(wish => ({
                 type: 'wish',
-                title: `Wish shared with ${wish.recipientName}`,
-                description: `From ${wish.senderName}`,
-                status: wish.status,
+                title: `Wish shared with ${wish.recipientName || 'Unknown'}`,
+                description: `From ${wish.senderName || 'Unknown'}`,
+                status: wish.status || 'pending',
                 timestamp: wish.createdAt
             })),
-            ...recentActivity[1].map(file => ({
+            ...recentFiles.map(file => ({
                 type: 'file',
-                title: `File shared: ${file.fileName}`,
-                description: `Shared with ${file.sharedWith.length} users`,
+                title: `File shared: ${file.originalName || file.fileName}`,
+                description: `Shared by ${file.owner}`,
                 timestamp: file.createdAt
             }))
         ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
@@ -49,10 +49,12 @@ router.get('/summary', async (req, res) => {
         res.json({
             success: true,
             data: {
-                totalFiles,
-                totalSharedFiles,
-                totalSharedWishes,
-                totalAdMob,
+                counts: {
+                    files: totalFiles,
+                    sharedFiles: totalSharedFiles,
+                    wishes: totalSharedWishes,
+                    adMob: totalAdMob
+                },
                 recentActivity: formattedActivity
             }
         });
@@ -109,20 +111,50 @@ router.get('/stats', async (req, res) => {
                                 date: '$createdAt'
                             }
                         },
-                        count: { $sum: 1 },
-                        views: { $sum: '$views' }
+                        count: { $sum: 1 }
                     }
                 },
                 { $sort: { _id: 1 } }
             ])
         ]);
 
+        // Fill in missing dates with zero counts
+        const stats = {};
+        for (let i = 0; i < 7; i++) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            stats[dateStr] = {
+                files: 0,
+                wishes: 0
+            };
+        }
+
+        // Add file stats
+        fileStats.forEach(stat => {
+            if (stats[stat._id]) {
+                stats[stat._id].files = stat.count;
+            }
+        });
+
+        // Add wish stats
+        wishStats.forEach(stat => {
+            if (stats[stat._id]) {
+                stats[stat._id].wishes = stat.count;
+            }
+        });
+
+        // Convert to array and sort by date
+        const formattedStats = Object.entries(stats)
+            .map(([date, counts]) => ({
+                date,
+                ...counts
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
         res.json({
             success: true,
-            data: {
-                fileStats,
-                wishStats
-            }
+            data: formattedStats
         });
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);

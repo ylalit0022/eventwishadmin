@@ -3,7 +3,6 @@ import {
     Row,
     Col,
     Card,
-    Table,
     Button,
     Radio,
     Statistic,
@@ -26,6 +25,8 @@ import {
 } from '@ant-design/icons';
 import { sharedWishesApi } from '../services/api';
 import debounce from 'lodash.debounce';
+import DataTable from './DataTable/DataTable';
+import { ResponsiveContainer } from './responsive';
 
 const { Title } = Typography;
 const { useToken } = theme;
@@ -163,21 +164,19 @@ const SharedWishes = () => {
             setExportLoading(true);
             let exportFilter;
             
-            // Convert filter to appropriate format
+            // Convert filter to appropriate format for backend
             switch (filter) {
-                case 'today': {
-                    const today = new Date();
-                    exportFilter = today.toLocaleDateString('en-GB'); // DD/MM/YYYY format
+                case 'today':
+                    exportFilter = 'today';
                     break;
-                }
                 case 'week':
-                    exportFilter = 'this-month'; // Using this-month as closest equivalent
+                    exportFilter = 'week';
                     break;
                 case 'month':
-                    exportFilter = 'this-month';
+                    exportFilter = 'month';
                     break;
                 case 'all':
-                    exportFilter = 'all-time';
+                    exportFilter = 'all';
                     break;
                 default:
                     exportFilter = 'today';
@@ -289,10 +288,9 @@ const SharedWishes = () => {
     ];
 
     return (
-        <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
-            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                <Title level={2} style={{ margin: 0 }}>Shared Wishes Analytics</Title>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <ResponsiveContainer>
+            <Card title="Shared Wishes Analytics" className="wishes-card">
+                <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                     <Radio.Group 
                         value={filter} 
                         onChange={handleFilterChange}
@@ -319,132 +317,122 @@ const SharedWishes = () => {
                         Export
                     </Button>
                 </div>
-            </div>
 
-            <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-                <Col xs={24} sm={12} md={6}>
-                    <Card>
-                        <Statistic
-                            title="Total Wishes"
-                            value={data.analytics.totalWishes}
-                            prefix={<RiseOutlined />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                    <Card>
-                        <Statistic
-                            title="Total Views"
-                            value={data.analytics.totalViews}
-                            prefix={<EyeOutlined />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                    <Card>
-                        <Statistic
-                            title="Average Views"
-                            value={data.analytics.avgViews}
-                            precision={2}
-                            prefix={<LineChartOutlined />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                    <Card>
-                        <Statistic
-                            title="Top Performing Wish"
-                            value={data.analytics.topWish?.views || 0}
-                            prefix={<TrophyOutlined />}
-                            suffix="views"
-                        />
-                    </Card>
-                </Col>
-            </Row>
+                <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                    <Col xs={24} sm={12} md={6}>
+                        <Card>
+                            <Statistic
+                                title="Total Wishes"
+                                value={data.analytics.totalWishes}
+                                prefix={<RiseOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <Card>
+                            <Statistic
+                                title="Total Views"
+                                value={data.analytics.totalViews}
+                                prefix={<EyeOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <Card>
+                            <Statistic
+                                title="Average Views"
+                                value={data.analytics.avgViews}
+                                precision={2}
+                                prefix={<LineChartOutlined />}
+                            />
+                        </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <Card>
+                            <Statistic
+                                title="Top Performing Wish"
+                                value={data.analytics.topWish?.views || 0}
+                                prefix={<TrophyOutlined />}
+                                suffix="views"
+                            />
+                        </Card>
+                    </Col>
+                </Row>
 
-            <Card 
-                style={{ 
-                    marginBottom: '24px',
-                    background: token.colorBgContainer,
-                    boxShadow: token.boxShadow,
-                    borderRadius: token.borderRadiusLG
-                }}
-            >
-                <Title level={4} style={{ marginBottom: '16px' }}>Views Trend</Title>
-                {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px' }}>
-                        <Spin size="large" />
-                    </div>
-                ) : (
-                    <div style={{ 
-                        height: '200px', 
-                        display: 'flex', 
-                        alignItems: 'flex-end', 
-                        gap: '4px',
-                        padding: '16px 0'
-                    }}>
-                        {data.analytics.trend.map((item) => {
-                            const maxViews = Math.max(...data.analytics.trend.map(d => d.views));
-                            const percentage = (item.views / maxViews) * 100;
-                            return (
-                                <div 
-                                    key={item._id} 
-                                    style={{ 
-                                        flex: 1, 
-                                        display: 'flex', 
-                                        flexDirection: 'column', 
-                                        alignItems: 'center',
-                                        minWidth: 0
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            width: '100%',
-                                            height: `${percentage}%`,
-                                            background: `linear-gradient(180deg, ${token.colorPrimary} 0%, ${token.colorPrimaryActive} 100%)`,
-                                            borderRadius: '4px 4px 0 0',
-                                            minHeight: '1px',
-                                            transition: 'height 0.3s ease'
+                <Card 
+                    style={{ 
+                        marginBottom: '24px',
+                        background: token.colorBgContainer,
+                        boxShadow: token.boxShadow,
+                        borderRadius: token.borderRadiusLG
+                    }}
+                >
+                    <Title level={4} style={{ marginBottom: '16px' }}>Views Trend</Title>
+                    {loading ? (
+                        <div style={{ textAlign: 'center', padding: '40px' }}>
+                            <Spin size="large" />
+                        </div>
+                    ) : (
+                        <div style={{ 
+                            height: '200px', 
+                            display: 'flex', 
+                            alignItems: 'flex-end', 
+                            gap: '4px',
+                            padding: '16px 0'
+                        }}>
+                            {data.analytics.trend.map((item) => {
+                                const maxViews = Math.max(...data.analytics.trend.map(d => d.views));
+                                const percentage = (item.views / maxViews) * 100;
+                                return (
+                                    <div 
+                                        key={item._id} 
+                                        style={{ 
+                                            flex: 1, 
+                                            display: 'flex', 
+                                            flexDirection: 'column', 
+                                            alignItems: 'center',
+                                            minWidth: 0
                                         }}
-                                    />
-                                    <div style={{ 
-                                        fontSize: '10px', 
-                                        marginTop: '4px', 
-                                        transform: 'rotate(-45deg)',
-                                        color: token.colorTextSecondary,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        maxWidth: '24px'
-                                    }}>
-                                        {item._id.split('-')[2]}
+                                    >
+                                        <div
+                                            style={{
+                                                width: '100%',
+                                                height: `${percentage}%`,
+                                                background: `linear-gradient(180deg, ${token.colorPrimary} 0%, ${token.colorPrimaryActive} 100%)`,
+                                                borderRadius: '4px 4px 0 0',
+                                                minHeight: '1px',
+                                                transition: 'height 0.3s ease'
+                                            }}
+                                        />
+                                        <div style={{ 
+                                            fontSize: '10px', 
+                                            marginTop: '4px', 
+                                            transform: 'rotate(-45deg)',
+                                            color: token.colorTextSecondary,
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            maxWidth: '24px'
+                                        }}>
+                                            {item._id.split('-')[2]}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </Card>
 
-            <Card
-                style={{
-                    background: token.colorBgContainer,
-                    boxShadow: token.boxShadow,
-                    borderRadius: token.borderRadiusLG
-                }}
-            >
-                <Table
+                <DataTable 
                     columns={columns}
-                    dataSource={data.wishes}
-                    rowKey="id"
+                    data={data.wishes}
+                    loading={loading}
                     pagination={data.pagination}
                     onChange={handleTableChange}
-                    loading={loading}
-                    scroll={{ x: 'max-content' }}
-                    style={{ minHeight: '400px' }}
+                    cardView={true}
                 />
             </Card>
-        </div>
+        </ResponsiveContainer>
     );
 };
 

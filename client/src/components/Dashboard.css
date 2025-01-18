@@ -1,0 +1,116 @@
+.dashboard-container {
+    padding: 24px;
+}
+
+.dashboard-loading {
+    text-align: center;
+    padding: 50px;
+}
+
+.dashboard-title {
+    margin-bottom: 24px;
+}
+
+/* Statistics Cards */
+.stat-cards {
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    height: 100%;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card .ant-statistic {
+    text-align: center;
+}
+
+.stat-card .ant-statistic-title {
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+.stat-card .ant-statistic-content {
+    font-size: 24px;
+}
+
+/* Activity List */
+.activity-card {
+    margin-bottom: 24px;
+}
+
+.activity-item {
+    padding: 16px !important;
+}
+
+.activity-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.activity-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.activity-time {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.45);
+}
+
+/* Mobile Styles */
+@media screen and (max-width: 768px) {
+    .dashboard-container {
+        padding: 12px;
+    }
+
+    .dashboard-title {
+        margin-bottom: 16px;
+        font-size: 20px !important;
+    }
+
+    .stat-card {
+        margin-bottom: 0;
+    }
+
+    .stat-card .ant-statistic-title {
+        font-size: 14px;
+    }
+
+    .stat-card .ant-statistic-content {
+        font-size: 20px;
+    }
+
+    .activity-item {
+        padding: 12px !important;
+    }
+
+    .activity-header {
+        flex-wrap: wrap;
+    }
+
+    .activity-details {
+        gap: 2px;
+    }
+
+    /* Card styles */
+    .ant-card-head {
+        min-height: 48px !important;
+        padding: 0 12px !important;
+    }
+
+    .ant-card-head-title {
+        padding: 12px 0 !important;
+        font-size: 16px !important;
+    }
+
+    .ant-card-body {
+        padding: 12px !important;
+    }
+}

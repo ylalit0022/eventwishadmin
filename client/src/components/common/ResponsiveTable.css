@@ -1,0 +1,57 @@
+.responsive-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: white;
+  border-radius: 8px;
+}
+
+.responsive-table-wrapper .ant-table-wrapper {
+  margin: -1px;
+}
+
+/* Mobile styles */
+@media screen and (max-width: 768px) {
+  .responsive-table-wrapper {
+    margin: 0 -12px;
+    border-radius: 0;
+  }
+
+  .responsive-table-wrapper .ant-table {
+    font-size: 14px;
+  }
+
+  .responsive-table-wrapper .ant-table-thead > tr > th {
+    padding: 8px !important;
+    white-space: nowrap;
+  }
+
+  .responsive-table-wrapper .ant-table-tbody > tr > td {
+    padding: 8px !important;
+  }
+
+  /* Improve touch targets */
+  .responsive-table-wrapper .ant-table-tbody > tr > td .ant-btn {
+    padding: 4px 8px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  .responsive-table-wrapper .ant-table-tbody > tr > td .ant-space {
+    gap: 4px !important;
+  }
+
+  /* Pagination */
+  .responsive-table-wrapper .ant-pagination {
+    padding: 8px;
+    text-align: center;
+  }
+
+  .responsive-table-wrapper .ant-pagination-item,
+  .responsive-table-wrapper .ant-pagination-prev,
+  .responsive-table-wrapper .ant-pagination-next {
+    min-width: 28px;
+    height: 28px;
+    line-height: 26px;
+  }
+}

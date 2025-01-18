@@ -23,23 +23,6 @@ const sharedFileSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    sharedWith: [{
-        email: {
-            type: String,
-            required: true,
-            trim: true,
-            lowercase: true
-        },
-        accessLevel: {
-            type: String,
-            enum: ['view', 'edit'],
-            default: 'view'
-        },
-        sharedAt: {
-            type: Date,
-            default: Date.now
-        }
-    }],
     owner: {
         type: String,
         required: true,
@@ -48,27 +31,32 @@ const sharedFileSchema = new mongoose.Schema({
     },
     description: {
         type: String,
-        trim: true
-    },
-    isPublic: {
-        type: Boolean,
-        default: false
+        trim: true,
+        default: ''
     }
 }, {
     timestamps: true,
     toJSON: {
+        virtuals: true,
         transform: function(doc, ret) {
-            ret.id = ret._id;
-            delete ret._id;
+            // Add display name virtual
+            ret.displayName = ret.originalName;
+            // Remove sensitive info
+            delete ret.path;
             delete ret.__v;
             return ret;
         }
     }
 });
 
-// Indexes for better query performance
+// Virtual for display name
+sharedFileSchema.virtual('displayName').get(function() {
+    return this.originalName;
+});
+
+// Ensure indexes for better query performance
 sharedFileSchema.index({ owner: 1, createdAt: -1 });
-sharedFileSchema.index({ 'sharedWith.email': 1 });
-sharedFileSchema.index({ fileName: 'text', description: 'text' });
+sharedFileSchema.index({ fileName: 1 });
+sharedFileSchema.index({ originalName: 'text', description: 'text' });
 
 module.exports = mongoose.model('SharedFile', sharedFileSchema);

@@ -1,0 +1,65 @@
+.shared-files-container {
+    padding: 24px;
+}
+
+.file-thumbnail {
+    width: 40px !important;
+    height: 40px !important;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.preview-modal .ant-modal-body {
+    padding: 0;
+    overflow: hidden;
+}
+
+.preview-modal img {
+    display: block;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+@media screen and (max-width: 768px) {
+    .shared-files-container {
+        padding: 12px;
+    }
+
+    .ant-card-head-title {
+        font-size: 16px !important;
+    }
+
+    .ant-card-extra .ant-btn {
+        padding: 4px 8px;
+        height: 32px;
+        font-size: 14px;
+    }
+
+    .file-thumbnail {
+        width: 32px !important;
+        height: 32px !important;
+    }
+
+    /* Adjust table cell padding */
+    .ant-table-cell {
+        padding: 8px !important;
+    }
+
+    /* Make action buttons more touch-friendly */
+    .ant-btn {
+        min-width: 32px;
+        height: 32px;
+        padding: 4px 8px;
+    }
+
+    /* Adjust modal for mobile */
+    .preview-modal {
+        top: 0;
+        padding-bottom: 0;
+        margin: 0;
+    }
+
+    .preview-modal .ant-modal-content {
+        border-radius: 0;
+    }
+}

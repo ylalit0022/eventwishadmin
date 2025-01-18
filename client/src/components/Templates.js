@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Table,
     Card,
     Button,
     Space,
@@ -12,7 +11,9 @@ import {
     message,
     Upload,
     Tooltip,
-    DatePicker
+    Tag,
+    Dropdown,
+    Menu
 } from 'antd';
 import {
     PlusOutlined,
@@ -21,16 +22,19 @@ import {
     EditOutlined,
     DeleteOutlined,
     EyeOutlined,
-    SearchOutlined
+    MenuOutlined
 } from '@ant-design/icons';
 import { templatesApi } from '../services/api';
 import CodeEditor from '@uiw/react-textarea-code-editor';
-import debounce from 'lodash.debounce';
+import ResponsiveTable from './common/ResponsiveTable';
+import ResponsiveFilters from './common/ResponsiveFilters';
+import { useResponsive } from '../hooks/useResponsive';
+import './Templates.css';
 
-const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const Templates = () => {
+    const { isMobile } = useResponsive();
     const [data, setData] = useState({
         templates: [],
         pagination: {
@@ -44,9 +48,11 @@ const Templates = () => {
     });
     const [loading, setLoading] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
+    const [importModalVisible, setImportModalVisible] = useState(false);
     const [previewVisible, setPreviewVisible] = useState(false);
     const [previewContent, setPreviewContent] = useState('');
     const [editingTemplate, setEditingTemplate] = useState(null);
+    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
     const [form] = Form.useForm();
     const [searchText, setSearchText] = useState('');
     const [selectedStatus, setSelectedStatus] = useState(undefined);
@@ -74,7 +80,9 @@ const Templates = () => {
                         current: page,
                         total: response.data.pagination.total
                     },
-                    filters: response.data.filters
+                    filters: {
+                        categories: response.data.filters?.categories || []
+                    }
                 });
             }
         } catch (error) {
@@ -85,54 +93,270 @@ const Templates = () => {
         }
     };
 
-    // Initialize data
-    useEffect(() => {
-        fetchData();
-    }, [searchText, selectedStatus, selectedCategory, dateRange]);
+    // Handle bulk actions
+    const handleBulkAction = async (action) => {
+        if (!selectedRowKeys.length) {
+            message.warning('Please select templates first');
+            return;
+        }
 
-    // Handle template creation/update
-    const handleSubmit = async (values) => {
         try {
-            // Ensure all required fields are present
-            const templateData = {
-                ...values,
-                cssContent: values.cssContent || '',
-                jsContent: values.jsContent || '',
-                previewUrl: values.previewUrl || '',
-                status: values.status || true
-            };
-
-            if (editingTemplate) {
-                await templatesApi.update(editingTemplate.id, templateData);
-                message.success('Template updated successfully');
-            } else {
-                await templatesApi.create(templateData);
-                message.success('Template created successfully');
+            switch (action) {
+                case 'delete':
+                    await templatesApi.bulkDelete(selectedRowKeys);
+                    message.success('Templates deleted successfully');
+                    break;
+                case 'activate':
+                    await templatesApi.bulkUpdateStatus(selectedRowKeys, true);
+                    message.success('Templates activated successfully');
+                    break;
+                case 'deactivate':
+                    await templatesApi.bulkUpdateStatus(selectedRowKeys, false);
+                    message.success('Templates deactivated successfully');
+                    break;
+                default:
+                    return;
             }
-            setModalVisible(false);
-            form.resetFields();
-            setEditingTemplate(null);
+            setSelectedRowKeys([]);
             fetchData();
         } catch (error) {
-            console.error('Error saving template:', error);
-            if (error.response?.data?.details) {
-                // Show specific validation errors
-                const details = error.response.data.details;
-                const errorMessages = Object.entries(details)
-                    .filter(([_, msg]) => msg)
-                    .map(([field, msg]) => `${field}: ${msg}`)
-                    .join('\n');
-                message.error(errorMessages || 'Failed to save template');
-            } else {
-                message.error('Failed to save template');
-            }
+            console.error('Error performing bulk action:', error);
+            message.error('Failed to perform bulk action');
         }
     };
 
-    // Handle template deletion
-    const handleDelete = async (id) => {
+    // Handle import
+    const handleImport = async (file) => {
         try {
-            await templatesApi.delete(id);
+            const formData = new FormData();
+            formData.append('file', file);
+            await templatesApi.import(formData);
+            message.success('Templates imported successfully');
+            setImportModalVisible(false);
+            fetchData();
+            return false; // Prevent automatic Upload component upload
+        } catch (error) {
+            console.error('Error importing templates:', error);
+            message.error('Failed to import templates');
+            return false;
+        }
+    };
+
+    // Handle export
+    const handleExport = async () => {
+        try {
+            await templatesApi.export({
+                search: searchText,
+                status: selectedStatus,
+                category: selectedCategory,
+                dateRange: dateRange?.join(',')
+            });
+            message.success('Templates exported successfully');
+        } catch (error) {
+            console.error('Error exporting templates:', error);
+            message.error('Failed to export templates');
+        }
+    };
+
+    // Table row selection
+    const rowSelection = {
+        selectedRowKeys,
+        onChange: (keys) => setSelectedRowKeys(keys)
+    };
+
+    // Bulk action menu
+    const bulkActionMenu = (
+        <Menu onClick={({ key }) => handleBulkAction(key)}>
+            <Menu.Item key="delete" danger>Delete Selected</Menu.Item>
+            <Menu.Item key="activate">Activate Selected</Menu.Item>
+            <Menu.Item key="deactivate">Deactivate Selected</Menu.Item>
+        </Menu>
+    );
+
+    // Handle status toggle
+    const handleStatusToggle = async (id, checked) => {
+        try {
+            await templatesApi.toggleStatus(id);
+            message.success(`Template ${checked ? 'activated' : 'deactivated'} successfully`);
+            fetchData();
+        } catch (error) {
+            console.error('Error toggling template status:', error);
+            message.error('Failed to update template status');
+        }
+    };
+
+    // Table columns
+    const columns = [
+        {
+            title: '#',
+            key: 'serialNumber',
+            width: 70,
+            render: (_, __, index) => {
+                const { current, pageSize } = data.pagination;
+                return ((current - 1) * pageSize) + index + 1;
+            }
+        },
+        {
+            title: 'Name',
+            dataIndex: 'title',
+            key: 'title',
+            ellipsis: true,
+        },
+        {
+            title: 'Category',
+            dataIndex: 'category',
+            key: 'category',
+            width: isMobile ? 100 : 120,
+            render: category => (
+                <Tag color="blue">{category}</Tag>
+            )
+        },
+        {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            width: isMobile ? 90 : 100,
+            render: (status, record) => (
+                <Switch
+                    checked={status}
+                    onChange={(checked) => handleStatusToggle(record.id, checked)}
+                />
+            )
+        },
+        {
+            title: 'Actions',
+            key: 'actions',
+            width: isMobile ? 120 : 150,
+            render: (_, record) => (
+                <Space size="small">
+                    <Tooltip title="Preview">
+                        <Button
+                            type="text"
+                            icon={<EyeOutlined />}
+                            onClick={() => handlePreview(record)}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Edit">
+                        <Button
+                            type="text"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(record)}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                        <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleDelete(record)}
+                        />
+                    </Tooltip>
+                </Space>
+            )
+        }
+    ];
+
+    // Effect to fetch data when filters change
+    useEffect(() => {
+        fetchData(1); // Reset to first page when filters change
+    }, [searchText, selectedStatus, selectedCategory, dateRange]);
+
+    // Initialize data
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    // Handle form submission
+    const handleSubmit = async (values) => {
+        try {
+            setLoading(true);
+            const formData = new FormData();
+
+            // Append all form fields
+            formData.append('title', values.title.trim());
+            formData.append('category', values.category.trim());
+            formData.append('htmlContent', values.htmlContent.trim());
+            formData.append('cssContent', values.cssContent?.trim() || '');
+            formData.append('jsContent', values.jsContent?.trim() || '');
+            formData.append('status', values.status !== undefined ? values.status : true);
+
+            // Append preview image if exists
+            if (values.previewImage && values.previewImage[0]?.originFileObj) {
+                formData.append('previewImage', values.previewImage[0].originFileObj);
+            }
+
+            let response;
+            if (editingTemplate) {
+                response = await templatesApi.update(editingTemplate.id, formData);
+            } else {
+                response = await templatesApi.create(formData);
+            }
+
+            if (response?.success) {
+                message.success(editingTemplate ? 'Template updated successfully' : 'Template created successfully');
+                setModalVisible(false);
+                form.resetFields();
+                setEditingTemplate(null);
+                fetchData();
+            } else {
+                throw new Error(response?.message || 'Operation failed');
+            }
+        } catch (error) {
+            console.error('Error saving template:', error);
+            const errorMessage = error.message || 'Failed to save template';
+            const fieldErrors = error.errors;
+            
+            if (fieldErrors) {
+                Object.entries(fieldErrors).forEach(([field, error]) => {
+                    if (error) {
+                        form.setFields([{
+                            name: field,
+                            errors: [error]
+                        }]);
+                    }
+                });
+            } else {
+                message.error(errorMessage);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Preview image upload props
+    const previewUploadProps = {
+        name: 'previewImage',
+        accept: 'image/*',
+        maxCount: 1,
+        beforeUpload: (file) => {
+            const isImage = file.type.startsWith('image/');
+            if (!isImage) {
+                message.error('You can only upload image files!');
+            }
+            const isLt5M = file.size / 1024 / 1024 < 5;
+            if (!isLt5M) {
+                message.error('Image must be smaller than 5MB!');
+            }
+            return false;
+        }
+    };
+
+    const handleEdit = (record) => {
+        setEditingTemplate(record);
+        form.setFieldsValue({
+            title: record.title,
+            category: record.category,
+            htmlContent: record.htmlContent,
+            cssContent: record.cssContent,
+            jsContent: record.jsContent,
+            status: record.status
+        });
+        setModalVisible(true);
+    };
+
+    const handleDelete = async (record) => {
+        try {
+            await templatesApi.delete(record.id);
             message.success('Template deleted successfully');
             fetchData();
         } catch (error) {
@@ -141,180 +365,28 @@ const Templates = () => {
         }
     };
 
-    // Handle status toggle
-    const handleStatusToggle = async (id, checked) => {
-        try {
-            await templatesApi.toggleStatus(id);
-            message.success('Status updated successfully');
-            fetchData();
-        } catch (error) {
-            console.error('Error updating status:', error);
-            message.error('Failed to update status');
-        }
+    const handlePreview = (record) => {
+        setPreviewContent(record.htmlContent);
+        setPreviewVisible(true);
     };
 
-    // Handle template preview
-    const handlePreview = async (template) => {
-        try {
-            const response = await templatesApi.preview({
-                htmlContent: template.htmlContent,
-                cssContent: template.cssContent,
-                jsContent: template.jsContent
-            });
-            setPreviewContent(response);
-            setPreviewVisible(true);
-        } catch (error) {
-            console.error('Error generating preview:', error);
-            message.error('Failed to generate preview');
-        }
+    const handleTableChange = (pagination) => {
+        fetchData(pagination.current);
     };
-
-    // Handle CSV import
-    const handleImport = async (file) => {
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            await templatesApi.import(formData);
-            message.success('Templates imported successfully');
-            fetchData();
-            return false; // Prevent default upload behavior
-        } catch (error) {
-            console.error('Error importing templates:', error);
-            message.error('Failed to import templates');
-            return false;
-        }
-    };
-
-    // Handle CSV export
-    const handleExport = async () => {
-        try {
-            await templatesApi.export({
-                status: selectedStatus,
-                category: selectedCategory,
-                dateRange: dateRange?.join(',')
-            });
-            message.success('Export started');
-        } catch (error) {
-            console.error('Error exporting templates:', error);
-            message.error('Failed to export templates');
-        }
-    };
-
-    // Table columns
-    const columns = [
-        {
-            title: 'Title',
-            dataIndex: 'title',
-            key: 'title',
-            sorter: (a, b) => a.title.localeCompare(b.title)
-        },
-        {
-            title: 'Category',
-            dataIndex: 'category',
-            key: 'category',
-            filters: data.filters.categories.map(cat => ({
-                text: cat,
-                value: cat
-            })),
-            onFilter: (value, record) => record.category === value
-        },
-        {
-            title: 'Preview',
-            key: 'preview',
-            render: (_, record) => (
-                <Button
-                    type="link"
-                    icon={<EyeOutlined />}
-                    onClick={() => handlePreview(record)}
-                />
-            )
-        },
-        {
-            title: 'Status',
-            key: 'status',
-            render: (_, record) => (
-                <Switch
-                    checked={record.status}
-                    onChange={(checked) => handleStatusToggle(record.id, checked)}
-                />
-            )
-        },
-        {
-            title: 'Actions',
-            key: 'actions',
-            render: (_, record) => (
-                <Space>
-                    <Button
-                        type="link"
-                        icon={<EditOutlined />}
-                        onClick={() => {
-                            setEditingTemplate(record);
-                            form.setFieldsValue(record);
-                            setModalVisible(true);
-                        }}
-                    />
-                    <Button
-                        type="link"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(record.id)}
-                    />
-                </Space>
-            )
-        }
-    ];
 
     return (
-        <div style={{ padding: '24px' }}>
+        <div className="templates-container">
             <Card
-                title="Templates"
+                title="Template Management"
                 extra={
                     <Space>
-                        <Input
-                            placeholder="Search templates..."
-                            prefix={<SearchOutlined />}
-                            onChange={debounce(
-                                (e) => setSearchText(e.target.value),
-                                300
-                            )}
-                        />
-                        <Select
-                            placeholder="Filter by status"
-                            allowClear
-                            onChange={setSelectedStatus}
-                            style={{ width: 150 }}
-                        >
-                            <Option value="true">Active</Option>
-                            <Option value="false">Inactive</Option>
-                        </Select>
-                        <Select
-                            placeholder="Filter by category"
-                            allowClear
-                            onChange={setSelectedCategory}
-                            style={{ width: 150 }}
-                        >
-                            {data.filters.categories.map(cat => (
-                                <Option key={cat} value={cat}>{cat}</Option>
-                            ))}
-                        </Select>
-                        <RangePicker
-                            onChange={(dates) => {
-                                setDateRange(dates ? dates.map(d => d.toISOString()) : null);
-                            }}
-                        />
-                        <Upload
-                            accept=".csv"
-                            showUploadList={false}
-                            beforeUpload={handleImport}
-                        >
-                            <Button icon={<UploadOutlined />}>Import</Button>
-                        </Upload>
-                        <Button
-                            icon={<DownloadOutlined />}
-                            onClick={handleExport}
-                        >
-                            Export
-                        </Button>
+                        {selectedRowKeys.length > 0 && (
+                            <Dropdown overlay={bulkActionMenu}>
+                                <Button icon={<MenuOutlined />}>
+                                    Bulk Actions ({selectedRowKeys.length})
+                                </Button>
+                            </Dropdown>
+                        )}
                         <Button
                             type="primary"
                             icon={<PlusOutlined />}
@@ -324,25 +396,36 @@ const Templates = () => {
                                 setModalVisible(true);
                             }}
                         >
-                            Add Template
+                            Add New
                         </Button>
                     </Space>
                 }
             >
-                <Table
+                <ResponsiveFilters
+                    onSearch={setSearchText}
+                    onStatusChange={setSelectedStatus}
+                    onCategoryChange={setSelectedCategory}
+                    onDateRangeChange={setDateRange}
+                    showCategoryFilter={true}
+                    categories={data.filters.categories}
+                    showDateFilter={true}
+                    placeholder="Search templates..."
+                />
+
+                <ResponsiveTable
+                    rowSelection={rowSelection}
                     columns={columns}
                     dataSource={data.templates}
-                    rowKey="id"
                     loading={loading}
                     pagination={data.pagination}
-                    onChange={(pagination) => fetchData(pagination.current)}
+                    onChange={handleTableChange}
+                    rowKey="id"
                 />
             </Card>
 
-            {/* Template Form Modal */}
             <Modal
-                title={editingTemplate ? 'Edit Template' : 'Add Template'}
-                visible={modalVisible}
+                title={editingTemplate ? 'Edit Template' : 'Create New Template'}
+                open={modalVisible}
                 onOk={form.submit}
                 onCancel={() => {
                     setModalVisible(false);
@@ -350,18 +433,28 @@ const Templates = () => {
                     setEditingTemplate(null);
                 }}
                 width={800}
+                confirmLoading={loading}
+                destroyOnClose
             >
                 <Form
                     form={form}
                     layout="vertical"
                     onFinish={handleSubmit}
+                    initialValues={{
+                        status: true,
+                        cssContent: '',
+                        jsContent: ''
+                    }}
                 >
                     <Form.Item
                         name="title"
                         label="Title"
-                        rules={[{ required: true, message: 'Please enter title' }]}
+                        rules={[
+                            { required: true, message: 'Please enter template title' },
+                            { max: 100, message: 'Title cannot exceed 100 characters' }
+                        ]}
                     >
-                        <Input />
+                        <Input placeholder="Enter template title" />
                     </Form.Item>
 
                     <Form.Item
@@ -370,13 +463,25 @@ const Templates = () => {
                         rules={[{ required: true, message: 'Please select category' }]}
                     >
                         <Select
+                            placeholder="Select category"
                             showSearch
                             allowClear
-                        >
-                            {data.filters.categories.map(cat => (
-                                <Option key={cat} value={cat}>{cat}</Option>
-                            ))}
-                        </Select>
+                            options={data.filters.categories.map(cat => ({ label: cat, value: cat }))}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="previewImage"
+                        label="Preview Image"
+                        valuePropName="fileList"
+                        getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList}
+                    >
+                        <Upload {...previewUploadProps} listType="picture-card">
+                            <div>
+                                <PlusOutlined />
+                                <div style={{ marginTop: 8 }}>Upload</div>
+                            </div>
+                        </Upload>
                     </Form.Item>
 
                     <Form.Item
@@ -402,7 +507,7 @@ const Templates = () => {
                     >
                         <CodeEditor
                             language="css"
-                            placeholder="Enter CSS content"
+                            placeholder="Enter CSS content (optional)"
                             padding={15}
                             style={{
                                 fontSize: 12,
@@ -418,7 +523,7 @@ const Templates = () => {
                     >
                         <CodeEditor
                             language="javascript"
-                            placeholder="Enter JavaScript content"
+                            placeholder="Enter JavaScript content (optional)"
                             padding={15}
                             style={{
                                 fontSize: 12,
@@ -429,40 +534,23 @@ const Templates = () => {
                     </Form.Item>
 
                     <Form.Item
-                        name="previewUrl"
-                        label="Preview URL"
-                    >
-                        <Input />
-                    </Form.Item>
-
-                    <Form.Item
                         name="status"
                         label="Status"
                         valuePropName="checked"
-                        initialValue={true}
                     >
                         <Switch />
                     </Form.Item>
                 </Form>
             </Modal>
 
-            {/* Preview Modal */}
             <Modal
-                title="Template Preview"
-                visible={previewVisible}
+                title="Preview Template"
+                open={previewVisible}
                 onCancel={() => setPreviewVisible(false)}
-                footer={null}
                 width={800}
+                footer={null}
             >
-                <iframe
-                    srcDoc={previewContent}
-                    style={{
-                        width: '100%',
-                        height: '500px',
-                        border: 'none'
-                    }}
-                    title="Template Preview"
-                />
+                <div dangerouslySetInnerHTML={{ __html: previewContent }} />
             </Modal>
         </div>
     );

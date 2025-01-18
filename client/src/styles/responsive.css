@@ -1,0 +1,85 @@
+/* Responsive Grid System */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* Responsive Table Styles */
+@media screen and (max-width: 768px) {
+  .ant-table {
+    font-size: 14px;
+  }
+
+  .ant-table-tbody > tr > td {
+    padding: 8px;
+  }
+
+  /* Make tables scrollable horizontally on mobile */
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}
+
+/* Responsive Typography */
+@media screen and (max-width: 576px) {
+  h1 { font-size: 24px; }
+  h2 { font-size: 20px; }
+  h3 { font-size: 18px; }
+  p { font-size: 14px; }
+}
+
+/* Responsive Spacing */
+@media screen and (max-width: 768px) {
+  .ant-layout-content {
+    padding: 12px !important;
+  }
+  
+  .ant-card {
+    margin-bottom: 12px;
+  }
+}
+
+/* Responsive Form Elements */
+@media screen and (max-width: 576px) {
+  .ant-form-item {
+    margin-bottom: 16px;
+  }
+
+  .ant-input,
+  .ant-select {
+    font-size: 14px;
+  }
+}
+
+/* Responsive Button Sizes */
+@media screen and (max-width: 576px) {
+  .ant-btn {
+    padding: 4px 12px;
+    font-size: 14px;
+    height: 32px;
+  }
+}
+
+/* Responsive Modal */
+@media screen and (max-width: 576px) {
+  .ant-modal {
+    max-width: calc(100vw - 32px) !important;
+    margin: 16px !important;
+  }
+  
+  .ant-modal-body {
+    padding: 16px;
+  }
+}
+
+/* Responsive Card Layouts */
+@media screen and (max-width: 768px) {
+  .ant-card {
+    border-radius: 8px;
+  }
+  
+  .ant-card-body {
+    padding: 16px;
+  }
+}
