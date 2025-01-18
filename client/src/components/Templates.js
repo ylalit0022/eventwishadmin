@@ -51,6 +51,7 @@ const Templates = () => {
     const [importModalVisible, setImportModalVisible] = useState(false);
     const [previewVisible, setPreviewVisible] = useState(false);
     const [previewContent, setPreviewContent] = useState('');
+    const [currentPreview, setCurrentPreview] = useState(null);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState([]);
     const [form] = Form.useForm();
@@ -303,8 +304,8 @@ const Templates = () => {
             const errorMessage = error.message || 'Failed to save template';
             const fieldErrors = error.errors;
             
-            if (fieldErrors) {
-                Object.entries(fieldErrors).forEach(([field, error]) => {
+            if (fieldErrors && typeof fieldErrors === 'object') {
+                Object.entries(fieldErrors || {}).forEach(([field, error]) => {
                     if (error) {
                         form.setFields([{
                             name: field,
@@ -346,6 +347,7 @@ const Templates = () => {
     };
 
     const handlePreview = (record) => {
+        setCurrentPreview(record);
         // Combine HTML, CSS and JS into a single HTML document
         const combinedContent = `
             <!DOCTYPE html>
@@ -355,20 +357,45 @@ const Templates = () => {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${record.title}</title>
                 <style>
+                    html, body {
+                        margin: 0;
+                        padding: 0;
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                        background: white;
+                    }
+                    #preview-container {
+                        width: 100%;
+                        height: 100%;
+                        position: relative;
+                    }
                     ${record.cssContent || ''}
                 </style>
             </head>
             <body>
-                ${record.htmlContent || ''}
+                <div id="preview-container">
+                    ${record.htmlContent || ''}
+                </div>
                 <script>
-                    ${record.jsContent || ''}
+                    document.addEventListener('DOMContentLoaded', function() {
+                        try {
+                            ${record.jsContent || ''}
+                        } catch (error) {
+                            console.error('Error:', error);
+                        }
+                    });
                 </script>
             </body>
             </html>
         `;
 
-        setPreviewContent(combinedContent);
-        setPreviewVisible(true);
+        // Reset the preview content before showing new template
+        setPreviewContent('');
+        setTimeout(() => {
+            setPreviewContent(combinedContent);
+            setPreviewVisible(true);
+        }, 0);
     };
 
     const handleTableChange = (pagination) => {
@@ -423,6 +450,44 @@ const Templates = () => {
                     rowKey="id"
                 />
             </Card>
+
+            <Modal
+                title="Preview Template"
+                open={previewVisible}
+                onCancel={() => {
+                    setPreviewVisible(false);
+                    setPreviewContent(''); // Clear content when closing
+                    setCurrentPreview(null); // Clear current preview
+                }}
+                width="80%"
+                style={{ top: 20 }}
+                footer={null}
+                destroyOnClose={true}
+            >
+                <div style={{ 
+                    height: '70vh', 
+                    overflow: 'hidden', 
+                    background: 'white',
+                    position: 'relative'
+                }}>
+                    {previewContent && currentPreview && (
+                        <iframe
+                            key={currentPreview.id || Date.now()} // Use currentPreview instead of record
+                            srcDoc={previewContent}
+                            title="Template Preview"
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: '4px',
+                                background: 'white'
+                            }}
+                            sandbox="allow-scripts"
+                            referrerPolicy="no-referrer"
+                        />
+                    )}
+                </div>
+            </Modal>
 
             <Modal
                 title={editingTemplate ? 'Edit Template' : 'Create New Template'}
@@ -541,27 +606,6 @@ const Templates = () => {
                         <Switch />
                     </Form.Item>
                 </Form>
-            </Modal>
-
-            <Modal
-                title="Preview Template"
-                open={previewVisible}
-                onCancel={() => setPreviewVisible(false)}
-                width="80%"
-                style={{ top: 20 }}
-                footer={null}
-            >
-                <iframe
-                    srcDoc={previewContent}
-                    style={{
-                        width: '100%',
-                        height: '600px',
-                        border: '1px solid #d9d9d9',
-                        borderRadius: '4px'
-                    }}
-                    sandbox="allow-scripts"
-                    title="Template Preview"
-                />
             </Modal>
         </div>
     );

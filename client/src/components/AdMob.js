@@ -133,9 +133,8 @@ const AdMob = () => {
             fetchAds();
         } catch (error) {
             console.error('Error saving ad:', error);
-            if (error.response?.data?.errors) {
-                // Show field-specific errors
-                Object.entries(error.response.data.errors).forEach(([field, msg]) => {
+            if (error.response && error.response.data && error.response.data.errors && typeof error.response.data.errors === 'object') {
+                Object.entries(error.response.data.errors || {}).forEach(([field, msg]) => {
                     form.setFields([{
                         name: field,
                         errors: [msg]
