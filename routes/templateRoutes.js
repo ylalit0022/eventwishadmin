@@ -4,6 +4,20 @@ const Template = require('../models/Template');
 const { Parser } = require('json2csv');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const csv = require('csv-parse');
+
+// Configure multer for file upload
+const upload = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'text/csv') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only CSV files are allowed'));
+        }
+    }
+});
 
 // Helper function to convert to CSV
 const convertToCSV = (data, fields) => {
@@ -175,10 +189,7 @@ router.get('/', async (req, res) => {
             .limit(limit);
 
         // Get unique categories for filters
-        const categories = await Template.distinct('category', {
-            // Only get categories from active templates
-            status: true
-        });
+        const categories = await Template.distinct('category');
 
         // Sort categories alphabetically
         categories.sort((a, b) => a.localeCompare(b));
@@ -187,11 +198,7 @@ router.get('/', async (req, res) => {
             success: true,
             data: {
                 templates,
-                pagination: {
-                    page,
-                    limit,
-                    total
-                },
+                total,
                 filters: {
                     categories
                 }
@@ -207,10 +214,19 @@ router.get('/', async (req, res) => {
     }
 });
 
-// DELETE /api/templates/:id - Delete template
+// DELETE /api/templates/:id - Delete single template
 router.delete('/:id', async (req, res) => {
     try {
-        const template = await Template.findByIdAndDelete(req.params.id);
+        const { id } = req.params;
+        
+        if (!id || id === 'undefined') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid template ID'
+            });
+        }
+
+        const template = await Template.findById(id);
         
         if (!template) {
             return res.status(404).json({
@@ -218,6 +234,8 @@ router.delete('/:id', async (req, res) => {
                 message: 'Template not found'
             });
         }
+
+        await Template.findByIdAndDelete(id);
 
         res.json({
             success: true,
@@ -227,7 +245,36 @@ router.delete('/:id', async (req, res) => {
         console.error('Error deleting template:', error);
         res.status(500).json({
             success: false,
-            message: 'Error deleting template',
+            message: error.name === 'CastError' ? 'Invalid template ID format' : 'Error deleting template',
+            error: error.message
+        });
+    }
+});
+
+// PUT /api/templates/:id/toggle-status - Toggle template status
+router.put('/:id/toggle-status', async (req, res) => {
+    try {
+        const template = await Template.findById(req.params.id);
+        
+        if (!template) {
+            return res.status(404).json({
+                success: false,
+                message: 'Template not found'
+            });
+        }
+
+        template.status = !template.status;
+        await template.save();
+
+        res.json({
+            success: true,
+            data: template
+        });
+    } catch (error) {
+        console.error('Error toggling template status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error toggling template status',
             error: error.message
         });
     }
@@ -237,25 +284,28 @@ router.delete('/:id', async (req, res) => {
 router.post('/bulk-delete', async (req, res) => {
     try {
         const { ids } = req.body;
-        if (!ids || !Array.isArray(ids) || !ids.length) {
+        
+        if (!Array.isArray(ids) || ids.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'No template IDs provided'
+                message: 'Invalid or empty template IDs'
             });
         }
 
-        await Template.deleteMany({ _id: { $in: ids } });
-
+        const result = await Template.deleteMany({ _id: { $in: ids } });
+        
         res.json({
             success: true,
-            message: 'Templates deleted successfully'
+            message: `Successfully deleted ${result.deletedCount} templates`,
+            data: {
+                deletedCount: result.deletedCount
+            }
         });
     } catch (error) {
         console.error('Error bulk deleting templates:', error);
         res.status(500).json({
             success: false,
-            message: 'Error bulk deleting templates',
-            error: error.message
+            message: 'Error deleting templates'
         });
     }
 });
@@ -264,96 +314,149 @@ router.post('/bulk-delete', async (req, res) => {
 router.post('/bulk-status', async (req, res) => {
     try {
         const { ids, status } = req.body;
-        if (!ids || !Array.isArray(ids) || !ids.length || typeof status !== 'boolean') {
+        
+        if (!Array.isArray(ids) || ids.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid request parameters'
+                message: 'Invalid or empty template IDs'
             });
         }
 
-        await Template.updateMany(
+        if (typeof status !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Status must be a boolean value'
+            });
+        }
+
+        const result = await Template.updateMany(
             { _id: { $in: ids } },
             { $set: { status } }
         );
-
+        
         res.json({
             success: true,
-            message: `Templates ${status ? 'activated' : 'deactivated'} successfully`
+            message: `Successfully updated ${result.modifiedCount} templates`,
+            data: {
+                modifiedCount: result.modifiedCount
+            }
         });
     } catch (error) {
-        console.error('Error bulk updating template status:', error);
+        console.error('Error updating template statuses:', error);
         res.status(500).json({
             success: false,
-            message: 'Error bulk updating template status',
-            error: error.message
+            message: 'Error updating template statuses'
         });
     }
 });
 
 // POST /api/templates/import - Import templates from CSV
-router.post('/import', async (req, res) => {
+router.post('/import', upload.single('file'), async (req, res) => {
     try {
-        const { file } = req.body;
-        if (!file) {
+        if (!req.file) {
             return res.status(400).json({
                 success: false,
                 message: 'No file uploaded'
             });
         }
 
-        const results = [];
-        const errors = [];
+        if (!req.file.mimetype.includes('csv')) {
+            return res.status(400).json({
+                success: false,
+                message: 'Only CSV files are allowed'
+            });
+        }
 
-        const csvData = file.split('\n').map(row => row.split(','));
+        const results = {
+            inserted: 0,
+            updated: 0,
+            failed: 0,
+            errors: []
+        };
 
-        for (const data of csvData) {
+        // Parse CSV file
+        const records = await new Promise((resolve, reject) => {
+            const records = [];
+            const parser = csv.parse({
+                columns: true,
+                skip_empty_lines: true,
+                trim: true
+            });
+
+            parser.on('readable', function() {
+                let record;
+                while ((record = parser.read()) !== null) {
+                    records.push(record);
+                }
+            });
+            
+            parser.on('error', (err) => {
+                reject(new Error(`Error parsing CSV: ${err.message}`));
+            });
+            
+            parser.on('end', () => resolve(records));
+
+            // Feed the file buffer to the parser
+            parser.write(req.file.buffer);
+            parser.end();
+        });
+
+        if (!records || !records.length) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid records found in CSV file'
+            });
+        }
+
+        // Process each record
+        for (const record of records) {
             try {
+                // Validate required fields
+                if (!record.title || !record.category || !record.htmlContent) {
+                    results.failed++;
+                    results.errors.push(`Row with title "${record.title || 'unknown'}" missing required fields`);
+                    continue;
+                }
+
+                const templateData = {
+                    title: record.title.trim(),
+                    category: record.category.trim(),
+                    htmlContent: record.htmlContent.trim(),
+                    cssContent: record.cssContent?.trim() || '',
+                    jsContent: record.jsContent?.trim() || '',
+                    previewUrl: record.previewUrl?.trim() || '',
+                    status: record.status?.toLowerCase() === 'false' ? false : true
+                };
+
                 // Check if template with same title exists
-                const existingTemplate = await Template.findOne({ title: data[0] });
-                
+                const existingTemplate = await Template.findOne({ title: templateData.title });
+
                 if (existingTemplate) {
                     // Update existing template
-                    Object.assign(existingTemplate, {
-                        category: data[1],
-                        htmlContent: data[2],
-                        cssContent: data[3],
-                        jsContent: data[4],
-                        status: data[5] === 'true'
-                    });
-                    await existingTemplate.save();
-                    results.push({ title: data[0], action: 'updated' });
+                    await Template.findByIdAndUpdate(existingTemplate._id, templateData);
+                    results.updated++;
                 } else {
                     // Create new template
-                    const template = new Template({
-                        title: data[0],
-                        category: data[1],
-                        htmlContent: data[2],
-                        cssContent: data[3],
-                        jsContent: data[4],
-                        status: data[5] === 'true'
-                    });
+                    const template = new Template(templateData);
                     await template.save();
-                    results.push({ title: data[0], action: 'created' });
+                    results.inserted++;
                 }
             } catch (error) {
-                errors.push({ title: data[0], error: error.message });
+                results.failed++;
+                results.errors.push(`Error processing row with title "${record.title || 'unknown'}": ${error.message}`);
             }
         }
 
         res.json({
             success: true,
-            message: 'Templates imported successfully',
-            data: {
-                results,
-                errors
-            }
+            message: `Import completed: ${results.inserted} inserted, ${results.updated} updated, ${results.failed} failed`,
+            data: results
         });
     } catch (error) {
         console.error('Error importing templates:', error);
         res.status(500).json({
             success: false,
-            message: 'Error importing templates',
-            error: error.message
+            message: error.message || 'Error importing templates'
         });
     }
 });
@@ -427,39 +530,6 @@ router.patch('/:id/status', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error toggling template status',
-            error: error.message
-        });
-    }
-});
-
-// POST /api/templates/preview - Generate preview HTML
-router.post('/preview', async (req, res) => {
-    try {
-        const { htmlContent, cssContent, jsContent } = req.body;
-
-        // Create preview HTML
-        const previewHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>${cssContent || ''}</style>
-            </head>
-            <body>
-                ${htmlContent || ''}
-                <script>${jsContent || ''}</script>
-            </body>
-            </html>
-        `;
-
-        res.setHeader('Content-Type', 'text/html');
-        res.send(previewHtml);
-    } catch (error) {
-        console.error('Error generating preview:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error generating preview',
             error: error.message
         });
     }

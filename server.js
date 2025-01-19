@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const morgan = require('morgan');
+const csv = require('csv-parser');
+const upload = require('multer')({ dest: 'uploads/' });
 
 // Load environment variables
 require('dotenv').config();
@@ -57,19 +59,21 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Connect to MongoDB
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://ylalit0022:jBRgqv6BBfj2lYaG@cluster0.3d1qt.mongodb.net/eventwishes?retryWrites=true&w=majority', {
+        const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://ylalit0022:jBRgqv6BBfj2lYaG@cluster0.3d1qt.mongodb.net/eventwishes?retryWrites=true&w=majority', {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
-        console.log('MongoDB Connected Successfully');
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+        
+        // Test the connection by listing collections
+        const collections = await conn.connection.db.listCollections().toArray();
+        console.log('Available collections:', collections.map(c => c.name));
+        
     } catch (err) {
-        console.error('MongoDB connection error:', err.message);
-        // Exit process with failure
+        console.error('MongoDB connection error:', err);
         process.exit(1);
     }
 };
-
-connectDB();
 
 // API Routes - All routes are prefixed with /api
 const apiRouter = express.Router();
@@ -85,6 +89,21 @@ apiRouter.use('/templates', templateRoutes);
 
 // Mount the API router at /api
 app.use('/api', apiRouter);
+
+// API documentation route
+apiRouter.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: 'EventWishes Admin Panel API',
+        endpoints: {
+            templates: '/api/templates',
+            files: '/api/files',
+            admob: '/api/admob-ads',
+            dashboard: '/api/dashboard',
+            sharedWishes: '/api/shared-wishes',
+        },
+    });
+});
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -104,24 +123,21 @@ app.use((err, req, res, next) => {
     });
 });
 
-// API documentation route
-apiRouter.get('/', (req, res) => {
-    res.json({
-        success: true,
-        message: 'EventWishes Admin Panel API',
-        endpoints: {
-            templates: '/api/templates',
-            files: '/api/files',
-            admob: '/api/admob-ads',
-            dashboard: '/api/dashboard',
-            sharedWishes: '/api/shared-wishes',
-        },
+// Connect to MongoDB before starting server
+connectDB().then(() => {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log('API Routes:');
+        console.log('- /api/templates');
+        console.log('- /api/files');
+        console.log('- /api/admob-ads');
+        console.log('- /api/dashboard');
+        console.log('- /api/shared-wishes');
     });
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+}).catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
 });
 
 // Handle process errors
